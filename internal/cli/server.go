@@ -1,4 +1,4 @@
-package app
+package cli
 
 import (
 	"fmt"
@@ -7,16 +7,16 @@ import (
 	"net/http"
 )
 
-func Run() error {
+func getServerInfo(hostPort string) {
 	// Формат ответа в рамках HTTP это *Response
-	resp, _ := http.Get("http://sidingkas:5995/api/v2/status")
+	resp, _ := http.Get("http://" + hostPort + "/api/v2/status")
 	// Считываем содержимое тела. Три популярных метода.
 	// 1. Получаем всё как строку или байты (маленькие ответы, JSON, HTML)
 	b, err := io.ReadAll(resp.Body)
 	// Так как "свиток" (scroll) resp.Body это однонаправленный поток (stream), не возможно «перемотать» его назад.
 	// Как только данные будут прочитаны (например, с помощью io.ReadAll(resp.Body)), повторное чтение вернет io.EOF (конец файла).
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("error: %s", err)
 	}
 	// // 2. Парсим JSON (самый эффективный способ)
 	// var user UserStruct
@@ -40,7 +40,6 @@ func Run() error {
 	// Отправляем содержимое тела ответа в стандартный поток вывода
 	// Про поток вывода пока (04.09.26) не пониаю..
 	fmt.Printf("%s", b)
-	return nil
 }
 
 // // Описание структуры http.Response
