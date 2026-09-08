@@ -1,22 +1,32 @@
-package cli
+package client
 
 import (
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 )
 
-func getServerInfo(hostPort string) {
+func getServerInfo(hostPort string) error {
 	// Формат ответа в рамках HTTP это *Response
-	resp, _ := http.Get("http://" + hostPort + "/api/v2/status")
+	resp, err := http.Get("http://" + hostPort + "/api/v2/status")
+	if err != nil {
+		return fmt.Errorf("network request failed: %w", err)
+	}
+	// ЗОЛОТОЕ ПРАВИЛО Go для HTTP-запросов:
+	// МОЖНО обращаться к resp.Body (ниже) ТОЛЬКО в том случае, если err == nil.
+
+	// КАЖДЫЙ РАЗ, когда успешно получен http.Response (err == nil и resp != nil),
+	// нужно вызвать resp.Body.Close() (регистрируем закрытие тела)
+	defer resp.Body.Close()
+
 	// Считываем содержимое тела. Три популярных метода.
+
 	// 1. Получаем всё как строку или байты (маленькие ответы, JSON, HTML)
 	b, err := io.ReadAll(resp.Body)
 	// Так как "свиток" (scroll) resp.Body это однонаправленный поток (stream), не возможно «перемотать» его назад.
 	// Как только данные будут прочитаны (например, с помощью io.ReadAll(resp.Body)), повторное чтение вернет io.EOF (конец файла).
 	if err != nil {
-		log.Fatalf("error: %s", err)
+		return fmt.Errorf("failed to read Response.Body: %w", err)
 	}
 	// // 2. Парсим JSON (самый эффективный способ)
 	// var user UserStruct
@@ -35,11 +45,17 @@ func getServerInfo(hostPort string) {
 	// _, err = io.Copy(out, resp.Body)
 	//
 
-	// Каждый раз, когда успешно получен http.Response (err == nil), нужно вызвать resp.Body.Close()
-	defer resp.Body.Close()
 	// Отправляем содержимое тела ответа в стандартный поток вывода
-	// Про поток вывода пока (04.09.26) не пониаю..
-	fmt.Printf("%s", b)
+	// Коротко про "стандартный поток вывода" (stdout).
+	// В операционных системах (Linux, Windows, macOS)
+	// у каждой программы при старте есть три стандартных потока данных:
+	// - Стандартный ввод (stdin) — то, что пользователь вводит с клавиатуры в консоль.
+	// - Стандартный вывод (stdout) — то, куда программа выводит свой обычный текст.
+	// fmt.Printf и fmt.Println по умолчанию пишут именно сюда. Вы видите этот текст прямо в терминале.
+	// - Стандартный вывод ошибок (stderr) — специальный отдельный поток для ошибок. Туда пишет, например, log.Println.
+	fmt.Printf("%s\n", b)
+
+	return nil
 }
 
 // // Описание структуры http.Response
