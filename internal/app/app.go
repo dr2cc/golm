@@ -1,8 +1,10 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"net"
+	"time"
 
 	"github.com/dr2cc/golm/internal/client"
 	"github.com/dr2cc/golm/internal/config"
@@ -10,25 +12,42 @@ import (
 )
 
 func Run(cfg config.Config) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	var hostPort string
-	if cfg.Host == "" {
-		// Находим компьютеры с портом сервиса ЛМ ЧЗ и получаем первый результат
-		hostPort = scanner.ScanSubnet(cfg.Subnet, cfg.Port, cfg.ScannerTimeout)
-	} else {
+
+	switch cfg.Command {
+	case "get":
+
+		if cfg.Host == "" {
+			// Находим компьютеры с портом сервиса ЛМ ЧЗ и получаем первый результат
+			hostPort = scanner.ScanSubnet(cfg.Subnet, cfg.Port, cfg.ScannerTimeout)
+		} else {
+			hostPort = net.JoinHostPort(cfg.Host, cfg.Port)
+		}
+
+		if hostPort == "" {
+			return fmt.Errorf("хостов с открытым портом %s не найдено", cfg.Port)
+		}
+
+		fmt.Printf("Проверяем статус ЛМ ЧЗ по адресу: %s\n", hostPort)
+
+		apiClient := client.New(hostPort, "", "")
+
+		if err := apiClient.GetServerInfo(hostPort); err != nil {
+			return fmt.Errorf("ошибка получения информации от сервера: %w", err)
+		}
+	case "post":
 		hostPort = net.JoinHostPort(cfg.Host, cfg.Port)
+		apiClient := client.New(hostPort, cfg.Username, cfg.Password)
+
+		fmt.Printf("Отправляем токен на %s...\n", hostPort)
+		res, err := apiClient.SendToken(ctx, cfg.Token)
+		if err != nil {
+			return fmt.Errorf("post command failed: %w", err)
+		}
+		fmt.Printf("Успешно! Ответ сервера: %s\n", res.Status)
 	}
-
-	if hostPort == "" {
-		return fmt.Errorf("хостов с открытым портом %s не найдено", cfg.Port)
-	}
-
-	fmt.Printf("Проверяем статус ЛМ ЧЗ по адресу: %s\n", hostPort)
-
-	apiClient := client.New(hostPort)
-
-	if err := apiClient.GetServerInfo(hostPort); err != nil {
-		return fmt.Errorf("ошибка получения информации от сервера: %w", err)
-	}
-
 	return nil
 }
