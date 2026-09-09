@@ -1,31 +1,28 @@
 package client
 
 import (
-	"fmt"
-	"net"
-
-	"github.com/dr2cc/golm/internal/config"
-	"github.com/dr2cc/golm/internal/scanner"
+	"net/http"
 )
 
-func Run(cfg config.Config) error {
-	var hostPort string
-	if cfg.Host == "" {
-		// Находим компьютеры с портом сервиса ЛМ ЧЗ и получаем первый результат
-		hostPort = scanner.ScanSubnet(cfg.Subnet, cfg.Port, cfg.ScannerTimeout)
-	} else {
-		hostPort = net.JoinHostPort(cfg.Host, cfg.Port)
+// Client инкапсулирует настройки для работы с удаленным сервером.
+// Хранение http.Client внутри структуры — это Go-идиома, позволяющая переиспользовать соединения.
+type Client struct {
+	httpClient *http.Client
+	baseURL    string
+	// username   string
+	// password   string
+}
+
+// New создает и возвращает настроенный экземпляр Client.
+// Мы явно передаем таймаут, избегая глобальных дефолтов.
+// func New(baseURL, username, password string, timeout time.Duration) *Client {
+func New(baseURL string) *Client {
+	return &Client{
+		httpClient: &http.Client{
+			// Timeout: timeout,
+		},
+		baseURL: baseURL,
+		// username: username,
+		// password: password,
 	}
-
-	if hostPort == "" {
-		return fmt.Errorf("хостов с открытым портом %s не найдено", cfg.Port)
-	}
-
-	fmt.Printf("Проверяем статус ЛМ ЧЗ по адресу: %s\n", hostPort)
-
-	if err := getServerInfo(hostPort); err != nil {
-		return fmt.Errorf("ошибка получения информации от сервера: %w", err)
-	}
-
-	return nil
 }

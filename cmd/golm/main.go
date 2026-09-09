@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 
-	"github.com/dr2cc/golm/internal/client"
+	"github.com/dr2cc/golm/internal/app"
 	"github.com/dr2cc/golm/internal/config"
 )
 
@@ -15,7 +15,7 @@ func main() {
 	}
 
 	// Run
-	if err := client.Run(*cfg); err != nil {
+	if err := app.Run(*cfg); err != nil {
 		log.Fatalf("error: %s", err)
 	}
 }

@@ -6,7 +6,7 @@ import (
 	"net/http"
 )
 
-func getServerInfo(hostPort string) error {
+func (c *Client) GetServerInfo(hostPort string) error {
 	// Формат ответа в рамках HTTP это *Response
 	resp, err := http.Get("http://" + hostPort + "/api/v2/status")
 	if err != nil {
