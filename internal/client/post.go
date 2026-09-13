@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 )
@@ -15,9 +16,9 @@ type RequestPayload struct {
 
 // ResponsePayload описывает JSON, который мы получаем ОТ сервера в ответ.
 type ResponsePayload struct {
-	OperationMode string `json:"operationMode"`
-	Status        string `json:"status"`
-	// Message string `json:"message"`
+	// OperationMode string `json:"operationMode"`
+	Status  string `json:"status"`
+	Message string `json:"message"`
 }
 
 // type Client struct {
@@ -70,6 +71,13 @@ func (c *Client) SendToken(ctx context.Context, token string) (*ResponsePayload,
 	// 6. Выполняем сетевой запрос через переиспользуемый httpClient
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			// Если мы знаем, что сервер обрабатывает запрос, несмотря на таймаут
+			return &ResponsePayload{
+				Status:  "timeout_accepted",
+				Message: "Запрос отправлен, но ответ не был получен в отведенное время (сервер думает слишком долго)",
+			}, nil
+		}
 		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}
 	// Важно: закрываем тело ответа, только если err == nil

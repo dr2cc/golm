@@ -1,10 +1,10 @@
 package config
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -19,6 +19,16 @@ type Config struct {
 	Token          string // post
 }
 
+// Функция для вывода общей справки по приложению
+func printGlobalUsage() {
+	exeName := filepath.Base(os.Args[0])
+	fmt.Fprintf(os.Stderr, "Использование: %s <команда> [флаги]\n\n", exeName)
+	fmt.Fprintf(os.Stderr, "Команды:\n")
+	fmt.Fprintf(os.Stderr, "  get   Запуск сканирования сети\n")
+	fmt.Fprintf(os.Stderr, "  post  Отправка данных на сервер\n\n")
+	fmt.Fprintf(os.Stderr, "Используйте \"%s <команда> -h\" для просмотра флагов конкретной команды.\n", exeName)
+}
+
 // New парсит флаги и возвращает готовую конфигурацию.
 // Если в будущем будет нужно читать переменные окружения или .env файл,
 // поменяется код только внутри этой функции.
@@ -27,23 +37,22 @@ func New() (*Config, error) {
 
 	// Проверяем, передал ли пользователь вообще команду
 	if len(os.Args) < 2 {
-		return nil, errors.New("expected 'get' or 'post' subcommands")
+		// Перехватываем вызов справки на самом верхнем уровне (до подкоманд)
+		printGlobalUsage()
+		os.Exit(1) // Завершаем программу сразу с кодом ошибки
+	}
+
+	if os.Args[1] == "-h" || os.Args[1] == "--help" || os.Args[1] == "help" {
+		printGlobalUsage()
+		os.Exit(0) // Успешный выход после печати справки
 	}
 
 	cfg.Command = os.Args[1]
 
-	// timeout := flag.Duration("t", 500*time.Millisecond, "scanner timeout")
-	// host := flag.String("h", "", "target host")
-	// subnet := flag.String("s", "192.168.0", "target subnet")
-	// port := flag.String("p", "5995", "target port")
-	// username := flag.String("u", "admin", "username")
-	// password := flag.String("pass", "admin", "password")
-	// flag.Parse()
-
 	switch cfg.Command {
 	case "get":
 		getCmd := flag.NewFlagSet("get", flag.ExitOnError)
-		host := getCmd.String("h", "", "target host")
+		host := getCmd.String("host", "", "target host")
 		subnet := getCmd.String("s", "192.168.0", "target subnet")
 		port := getCmd.String("p", "5995", "target port")
 		timeout := getCmd.Duration("t", 500*time.Millisecond, "scanner timeout")
@@ -60,19 +69,22 @@ func New() (*Config, error) {
 
 	case "post":
 		postCmd := flag.NewFlagSet("post", flag.ExitOnError)
-		host := postCmd.String("h", "localhost", "target host")
+		host := postCmd.String("host", "localhost", "target host")
 		port := postCmd.String("p", "5997", "target port")
-		// Специфичный флаг только для post
 		username := postCmd.String("u", "admin", "username")
 		password := postCmd.String("pass", "admin", "password")
-		token := postCmd.String("t", "", "auth token to send (required)")
+		token := postCmd.String("token", "", "auth token to send (required)")
 
 		if err := postCmd.Parse(os.Args[2:]); err != nil {
 			return nil, err
 		}
 
 		if *token == "" {
-			return nil, errors.New("flag -token is required for 'post' command")
+			// Если токена нет, принудительно покажем справку для post
+			fmt.Println("flag -token is required for 'post' command")
+			postCmd.Usage()
+			os.Exit(1)
+			// return nil, errors.New("flag -token is required for 'post' command")
 		}
 
 		cfg.Host = *host
