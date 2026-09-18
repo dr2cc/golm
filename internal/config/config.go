@@ -1,7 +1,6 @@
 package config
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -35,68 +34,70 @@ func printGlobalUsage() {
 func New() (*Config, error) {
 	cfg := &Config{}
 
-	// Проверяем, передал ли пользователь вообще команду
-	if len(os.Args) < 2 {
-		// Перехватываем вызов справки на самом верхнем уровне (до подкоманд)
-		printGlobalUsage()
-		os.Exit(1) // Завершаем программу сразу с кодом ошибки
-	}
+	// // ❌ config.New() не должен управлять работой приложения! Только создавать конфигурацию
 
-	if os.Args[1] == "-h" || os.Args[1] == "--help" || os.Args[1] == "help" {
-		printGlobalUsage()
-		os.Exit(0) // Успешный выход после печати справки
-	}
+	// // Проверяем, передал ли пользователь вообще команду
+	// if len(os.Args) < 2 {
+	// 	// Перехватываем вызов справки на самом верхнем уровне (до подкоманд)
+	// 	printGlobalUsage()
+	// 	os.Exit(1) // Завершаем программу сразу с кодом ошибки
+	// }
 
-	cfg.Command = os.Args[1]
+	// if os.Args[1] == "-h" || os.Args[1] == "--help" || os.Args[1] == "help" {
+	// 	printGlobalUsage()
+	// 	os.Exit(0) // Успешный выход после печати справки
+	// }
 
-	switch cfg.Command {
-	case "get":
-		getCmd := flag.NewFlagSet("get", flag.ExitOnError)
-		host := getCmd.String("host", "", "target host")
-		subnet := getCmd.String("s", "192.168.0", "target subnet")
-		port := getCmd.String("p", "5995", "target port")
-		timeout := getCmd.Duration("t", 500*time.Millisecond, "scanner timeout")
+	// cfg.Command = os.Args[1]
 
-		// Парсим аргументы начиная со 2-го индекса (пропуская имя программы и само слово 'get')
-		if err := getCmd.Parse(os.Args[2:]); err != nil {
-			return nil, err
-		}
+	// switch cfg.Command {
+	// case "get":
+	// 	getCmd := flag.NewFlagSet("get", flag.ExitOnError)
+	// 	host := getCmd.String("host", "", "target host")
+	// 	subnet := getCmd.String("s", "192.168.0", "target subnet")
+	// 	port := getCmd.String("p", "5995", "target port")
+	// 	timeout := getCmd.Duration("t", 500*time.Millisecond, "scanner timeout")
 
-		cfg.Host = *host
-		cfg.Subnet = *subnet
-		cfg.Port = *port
-		cfg.ScannerTimeout = *timeout
+	// 	// Парсим аргументы начиная со 2-го индекса (пропуская имя программы и само слово 'get')
+	// 	if err := getCmd.Parse(os.Args[2:]); err != nil {
+	// 		return nil, err
+	// 	}
 
-	case "post":
-		postCmd := flag.NewFlagSet("post", flag.ExitOnError)
-		host := postCmd.String("host", "localhost", "target host")
-		port := postCmd.String("p", "5997", "target port")
-		username := postCmd.String("u", "admin", "username")
-		password := postCmd.String("pass", "admin", "password")
-		token := postCmd.String("token", "", "auth token to send (required)")
+	// 	cfg.Host = *host
+	// 	cfg.Subnet = *subnet
+	// 	cfg.Port = *port
+	// 	cfg.ScannerTimeout = *timeout
 
-		if err := postCmd.Parse(os.Args[2:]); err != nil {
-			return nil, err
-		}
+	// case "post":
+	// 	postCmd := flag.NewFlagSet("post", flag.ExitOnError)
+	// 	host := postCmd.String("host", "localhost", "target host")
+	// 	port := postCmd.String("p", "5997", "target port")
+	// 	username := postCmd.String("u", "admin", "username")
+	// 	password := postCmd.String("pass", "admin", "password")
+	// 	token := postCmd.String("token", "", "auth token to send (required)")
 
-		if *token == "" {
-			// Если токена нет, принудительно покажем справку для post
-			fmt.Println("flag -token is required for 'post' command")
-			postCmd.Usage()
-			os.Exit(1)
-			// return nil, errors.New("flag -token is required for 'post' command")
-		}
+	// 	if err := postCmd.Parse(os.Args[2:]); err != nil {
+	// 		return nil, err
+	// 	}
 
-		cfg.Host = *host
-		cfg.Port = *port
-		cfg.Username = *username
-		cfg.Password = *password
-		cfg.Token = *token
-		cfg.ScannerTimeout = 500 * time.Millisecond // дефолт
+	// 	if *token == "" {
+	// 		// Если токена нет, принудительно покажем справку для post
+	// 		fmt.Println("flag -token is required for 'post' command")
+	// 		postCmd.Usage()
+	// 		os.Exit(1)
+	// 		// return nil, errors.New("flag -token is required for 'post' command")
+	// 	}
 
-	default:
-		return nil, fmt.Errorf("unknown command: %s. Choose 'get' or 'post'", cfg.Command)
-	}
+	// 	cfg.Host = *host
+	// 	cfg.Port = *port
+	// 	cfg.Username = *username
+	// 	cfg.Password = *password
+	// 	cfg.Token = *token
+	// 	cfg.ScannerTimeout = 500 * time.Millisecond // дефолт
+
+	// default:
+	// 	return nil, fmt.Errorf("unknown command: %s. Choose 'get' or 'post'", cfg.Command)
+	// }
 
 	return cfg, nil
 }
