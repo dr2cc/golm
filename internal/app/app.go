@@ -4,8 +4,10 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -14,12 +16,13 @@ import (
 
 // Константы для настройки проверки
 const (
-	// Замените на ваш URL публикации DataMobile
-	targetURL       = "http://localhost/polyMark/hs/DataMobileExch/"
+	// targetURL       = "http://localhost/tradeProfilDm/hs/DataMobileExch/" // "http://localhost/polyMark/hs/DataMobileExch/"
+	publicationName = "polyMark" // polyMark / tradeProfilDm
+	apacheAddress   = "localhost"
+	configPath      = `C:\Apache24\conf\httpd.conf` // Путь к конфигурационному файлу Apache (для Windows или Linux)
 	requestTimeout  = 5 * time.Second               // Время, после которого считаем, что сервер "умер"
 	warningDuration = 2 * time.Second               // Время, после которого считаем, что сервер "тормозит"
-	configPath      = `C:\Apache24\conf\httpd.conf` // Путь к конфигурационному файлу Apache (для Windows или Linux)
-	expectedVersion = "8.3.27.2214"                 // Ожидаемая версия платформы 1С
+	// expectedVersion = "8.3.27.2214"                                       // Ожидаемая версия платформы 1С
 
 	// НАСТРОЙКА АВТОРИЗАЦИИ 1С
 	// Укажите имя пользователя и пароль, под которыми ТСД подключаются к 1С
@@ -34,33 +37,10 @@ type DataMobileResponse struct {
 
 // 1. Функция чтения версии модуля 1С из Apache
 func showApache1CModule() {
-	// // Более простой вариант, без сравнения с expectedVersion
-	// file, err := os.Open(configPath)
-	// if err != nil {
-	// 	fmt.Printf("❌ ОШИБКА АПАЧА: Не удалось открыть httpd.conf: %v\n", err)
-	// 	return
-	// }
-	// defer file.Close()
-
-	// scanner := bufio.NewScanner(file)
-	// found := false
-
-	// for scanner.Scan() {
-	// 	line := scanner.Text()
-	// 	if strings.Contains(line, "_1cws_module") && strings.Contains(line, "LoadModule") {
-	// 		fmt.Printf("📦 Модуль 1С в конфигурации Apache:\n   %s\n", strings.TrimSpace(line))
-	// 		found = true
-	// 		break
-	// 	}
-	// }
-
-	// if !found {
-	// 	fmt.Println("❓ Модуль '_1cws_module' не найден или закомментирован в httpd.conf")
-	// }
-
+	// Простой вариант, без сравнения с expectedVersion
 	file, err := os.Open(configPath)
 	if err != nil {
-		fmt.Printf("ОШИБКА: Не удалось открыть файл httpd.conf: %v\n", err)
+		fmt.Printf("❌ ОШИБКА АПАЧА: Не удалось открыть httpd.conf: %v\n", err)
 		return
 	}
 	defer file.Close()
@@ -68,31 +48,55 @@ func showApache1CModule() {
 	scanner := bufio.NewScanner(file)
 	found := false
 
-	// Построчно читаем файл конфигурации
 	for scanner.Scan() {
 		line := scanner.Text()
-
-		// Ищем строку, содержащую подключение модуля 1С
 		if strings.Contains(line, "_1cws_module") && strings.Contains(line, "LoadModule") {
-			fmt.Printf("- Найден активный модуль 1С в Apache: %s\n", strings.TrimSpace(line))
-			// fmt.Println("- Найден активный модуль 1С в Apache:", strings.TrimSpace(line))
-			// fmt.Println(strings.TrimSpace(line))
-
-			// Пример валидации: проверяем, содержит ли строка ожидаемую версию
-			if !strings.Contains(line, expectedVersion) {
-				fmt.Printf("ВНИМАНИЕ: Версия модуля 1С отличается от целевой (%s)!\n", expectedVersion)
-			} else {
-				fmt.Printf("-- Целевая версия-%s Версия wsap24-модуля соответствует целевой!\n", expectedVersion)
-			}
-
+			fmt.Printf("- Модуль 1С в конфигурации Apache:\n   %s\n", strings.TrimSpace(line))
 			found = true
 			break
 		}
 	}
 
 	if !found {
-		fmt.Println("ПРЕДУПРЕЖДЕНИЕ: Модуль '_1cws_module' не найден в httpd.conf. Возможно, 1С не опубликована через этот Apache.")
+		fmt.Println("❓ Модуль '_1cws_module' не найден или закомментирован в httpd.conf")
 	}
+
+	// // Развернутый вариант- сравнение с целевой версией.
+	// file, err := os.Open(configPath)
+	// if err != nil {
+	// 	fmt.Printf("ОШИБКА: Не удалось открыть файл httpd.conf: %v\n", err)
+	// 	return
+	// }
+	// defer file.Close()
+
+	// scanner := bufio.NewScanner(file)
+	// found := false
+
+	// // Построчно читаем файл конфигурации
+	// for scanner.Scan() {
+	// 	line := scanner.Text()
+
+	// 	// Ищем строку, содержащую подключение модуля 1С
+	// 	if strings.Contains(line, "_1cws_module") && strings.Contains(line, "LoadModule") {
+	// 		fmt.Printf("- Найден активный модуль 1С в Apache: %s\n", strings.TrimSpace(line))
+	// 		// fmt.Println("- Найден активный модуль 1С в Apache:", strings.TrimSpace(line))
+	// 		// fmt.Println(strings.TrimSpace(line))
+
+	// 		// Пример валидации: проверяем, содержит ли строка ожидаемую версию
+	// 		if !strings.Contains(line, expectedVersion) {
+	// 			fmt.Printf("ВНИМАНИЕ: Версия модуля 1С отличается от целевой (%s)!\n", expectedVersion)
+	// 		} else {
+	// 			fmt.Printf("-- Целевая версия-%s Версия wsap24-модуля соответствует целевой!\n", expectedVersion)
+	// 		}
+
+	// 		found = true
+	// 		break
+	// 	}
+	// }
+
+	// if !found {
+	// 	fmt.Println("ПРЕДУПРЕЖДЕНИЕ: Модуль '_1cws_module' не найден в httpd.conf. Возможно, 1С не опубликована через этот Apache.")
+	// }
 }
 
 // 2. Функция проверки доступности и скорости HTTP-сервиса
@@ -100,6 +104,8 @@ func checkDataMobileService() {
 	client := &http.Client{
 		Timeout: requestTimeout,
 	}
+
+	targetURL := "http://" + apacheAddress + "/" + publicationName + "/hs/DataMobileExch/"
 
 	fmt.Printf("\n- Проверка сервиса DataMobile: %s\n", targetURL)
 
@@ -129,6 +135,29 @@ func checkDataMobileService() {
 
 	// Проверяем HTTP статус-код (теперь должен быть 200)
 	if resp.StatusCode != http.StatusOK {
+		// Обыгрываем конфликт версий (HTTP 409)
+		if resp.StatusCode == http.StatusConflict {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			bodyStr := string(bodyBytes)
+
+			fmt.Println("❌ КРИТИЧЕСКАЯ ОШИБКА: Конфликт версий 1С!")
+
+			// Регулярное выражение для поиска версий в круглых скобках
+			re := regexp.MustCompile(`\((\d+\.\d+\.\d+\.\d+)\s*-\s*(\d+\.\d+\.\d+\.\d+)\)`)
+			matches := re.FindStringSubmatch(bodyStr)
+
+			if len(matches) == 3 {
+				fmt.Printf("   📌 В Apache (wsap24-модуль): %s\n", matches[1])
+				fmt.Printf("   📌 На сервере (кластер 1С): %s\n", matches[2])
+				fmt.Println("   💡 Решение: Перепубликуйте базу или обновите путь к wsap24-модулю в httpd.conf!")
+			} else {
+				// Если текст ошибки изменился, выводим как есть
+				fmt.Printf("   Технические детали:\n%s\n", bodyStr)
+			}
+			return
+		}
+
+		// Другие ошибки (401, 404, 500 и т.д.)
 		fmt.Printf("❌ ОШИБКА СЕРВЕРА: Получен HTTP код %d вместо 200 OK\n", resp.StatusCode)
 		if resp.StatusCode == http.StatusUnauthorized {
 			fmt.Println("   💡 Подсказка: Неверный логин или пароль пользователя 1С.")
