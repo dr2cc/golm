@@ -2,6 +2,7 @@ package app
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,9 +18,9 @@ import (
 // Константы для настройки проверки
 const (
 	// targetURL       = "http://localhost/tradeProfilDm/hs/DataMobileExch/" // "http://localhost/polyMark/hs/DataMobileExch/"
-	publicationName = "polyMark" // polyMark / tradeProfilDm
-	apacheAddress   = "localhost"
-	configPath      = `C:\Apache24\conf\httpd.conf` // Путь к конфигурационному файлу Apache (для Windows или Linux)
+	publicationName = "polyMark"                    // polyMark / tradeProfilDm
+	apacheAddress   = "192.168.0.75"                // 192.168.0.75 / localhost
+	configPath      = `C:\Apache24\conf\httpd.conf` // ssh drk@192.168.0.75 cd /etc/apache2/ apache2.conf // Путь к конфигурационному файлу Apache (для Windows или Linux)
 	requestTimeout  = 5 * time.Second               // Время, после которого считаем, что сервер "умер"
 	warningDuration = 2 * time.Second               // Время, после которого считаем, что сервер "тормозит"
 	// expectedVersion = "8.3.27.2214"                                       // Ожидаемая версия платформы 1С
@@ -33,6 +34,46 @@ const (
 // Структура для парсинга ответа DataMobile
 type DataMobileResponse struct {
 	Data string `json:"data"`
+}
+
+// CheckApache проверяет доступность веб-сервера по заданному URL
+func CheckApache(ctx context.Context, url string) {
+	// Использование HEAD-запроса экономит трафик
+	req, err := http.NewRequestWithContext(ctx, "HEAD", url, nil)
+	if err != nil {
+		fmt.Printf("failed HEAD: %v", err)
+		return //false, err
+	}
+
+	// Настройка стандартного клиента с таймаутом
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Printf("failed client.Do: %v", err)
+		return //false, err
+	}
+	defer resp.Body.Close()
+
+	// Проверяем, что сервер ответил корректным HTTP-статусом (например, 200 OK или 403/404, что тоже подтверждает работу Apache)
+	if resp.StatusCode >= 200 && resp.StatusCode < 500 {
+		// Дополнительно можно проверить заголовок "Server"
+		serverHeader := resp.Header.Get("Server") // например, "Apache/2.4.41 (Ubuntu)"
+		fmt.Printf("- It just works! %s\n", serverHeader)
+		//return true, nil
+	}
+
+	//return false, nil
+}
+
+func apacheChecker(ctx context.Context) {
+	CheckApache(ctx, "http://"+apacheAddress)
+
+	// apiClient := client.New(apacheAddress, dbUser, dbPass)
+
+	// if err := apiClient.GetApacheInfo(apacheAddress); err != nil {
+	// 	fmt.Printf("ошибка получения информации от сервера: %v\n", err)
+	// 	return
+	// }
 }
 
 // 1. Функция чтения версии модуля 1С из Apache
@@ -61,42 +102,6 @@ func showApache1CModule() {
 		fmt.Println("❓ Модуль '_1cws_module' не найден или закомментирован в httpd.conf")
 	}
 
-	// // Развернутый вариант- сравнение с целевой версией.
-	// file, err := os.Open(configPath)
-	// if err != nil {
-	// 	fmt.Printf("ОШИБКА: Не удалось открыть файл httpd.conf: %v\n", err)
-	// 	return
-	// }
-	// defer file.Close()
-
-	// scanner := bufio.NewScanner(file)
-	// found := false
-
-	// // Построчно читаем файл конфигурации
-	// for scanner.Scan() {
-	// 	line := scanner.Text()
-
-	// 	// Ищем строку, содержащую подключение модуля 1С
-	// 	if strings.Contains(line, "_1cws_module") && strings.Contains(line, "LoadModule") {
-	// 		fmt.Printf("- Найден активный модуль 1С в Apache: %s\n", strings.TrimSpace(line))
-	// 		// fmt.Println("- Найден активный модуль 1С в Apache:", strings.TrimSpace(line))
-	// 		// fmt.Println(strings.TrimSpace(line))
-
-	// 		// Пример валидации: проверяем, содержит ли строка ожидаемую версию
-	// 		if !strings.Contains(line, expectedVersion) {
-	// 			fmt.Printf("ВНИМАНИЕ: Версия модуля 1С отличается от целевой (%s)!\n", expectedVersion)
-	// 		} else {
-	// 			fmt.Printf("-- Целевая версия-%s Версия wsap24-модуля соответствует целевой!\n", expectedVersion)
-	// 		}
-
-	// 		found = true
-	// 		break
-	// 	}
-	// }
-
-	// if !found {
-	// 	fmt.Println("ПРЕДУПРЕЖДЕНИЕ: Модуль '_1cws_module' не найден в httpd.conf. Возможно, 1С не опубликована через этот Apache.")
-	// }
 }
 
 // 2. Функция проверки доступности и скорости HTTP-сервиса
@@ -158,7 +163,7 @@ func checkDataMobileService() {
 		}
 
 		// Другие ошибки (401, 404, 500 и т.д.)
-		fmt.Printf("❌ ОШИБКА СЕРВЕРА: Получен HTTP код %d вместо 200 OK\n", resp.StatusCode)
+		fmt.Printf("-- ОШИБКА СЕРВИСА: Получен HTTP код %d вместо 200 OK\n", resp.StatusCode)
 		if resp.StatusCode == http.StatusUnauthorized {
 			fmt.Println("   💡 Подсказка: Неверный логин или пароль пользователя 1С.")
 		}
@@ -186,15 +191,21 @@ func checkDataMobileService() {
 }
 
 func Run(cfg config.Config) error {
-	// Сначала смотрим конфигурацию Apache
-	showApache1CModule()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Логика goapache
+	apacheChecker(ctx)
+
+	// Смотрим конфигурацию Apache (если это локальный компьютер)
+	if apacheAddress == "localhost" {
+		showApache1CModule()
+	}
 
 	// Затем тестируем живой сервис
 	checkDataMobileService()
 
-	// ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	// defer cancel()
-
+	// // Логика golm
 	// var hostPort string
 
 	// switch cfg.Command {

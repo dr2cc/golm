@@ -6,6 +6,27 @@ import (
 	"net/http"
 )
 
+func (c *Client) GetApacheInfo(hostPort string) error {
+	// Формат ответа в рамках HTTP это *Response
+	resp, err := http.Get("http://" + hostPort)
+	if err != nil {
+		return fmt.Errorf("network request failed: %w", err)
+	}
+
+	defer resp.Body.Close()
+
+	// Считываем содержимое тела. Получаем всё как строку или байты (маленькие ответы, JSON, HTML)
+	b, err := io.ReadAll(resp.Body)
+	// Так как "свиток" (scroll) resp.Body это однонаправленный поток (stream), не возможно «перемотать» его назад.
+	// Как только данные будут прочитаны (например, с помощью io.ReadAll(resp.Body)), повторное чтение вернет io.EOF (конец файла).
+	if err != nil {
+		return fmt.Errorf("failed to read Response.Body: %w", err)
+	}
+	fmt.Printf("%s\n", b)
+
+	return nil
+}
+
 func (c *Client) GetServerInfo(hostPort string) error {
 	// Формат ответа в рамках HTTP это *Response
 	resp, err := http.Get("http://" + hostPort + "/api/v2/status")
