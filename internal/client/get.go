@@ -1,35 +1,42 @@
 package client
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
 )
 
-func (c *Client) GetApacheInfo(hostPort string) error {
+func (c *Client) GetApacheInfo(ctx context.Context) error {
+	// Использование HEAD-запроса экономит трафик
+	req, err := http.NewRequestWithContext(ctx, "HEAD", c.baseURL, nil)
+	if err != nil {
+		// fmt.Printf("failed HEAD request: %v", err)
+		return fmt.Errorf("failed HEAD request: %w", err)
+	}
+
 	// Формат ответа в рамках HTTP это *Response
-	resp, err := http.Get("http://" + hostPort)
+	resp, err := c.httpClient.Do(req) //http.Get("http://" + hostPort)
 	if err != nil {
 		return fmt.Errorf("network request failed: %w", err)
 	}
 
 	defer resp.Body.Close()
 
-	// Считываем содержимое тела. Получаем всё как строку или байты (маленькие ответы, JSON, HTML)
-	b, err := io.ReadAll(resp.Body)
-	// Так как "свиток" (scroll) resp.Body это однонаправленный поток (stream), не возможно «перемотать» его назад.
-	// Как только данные будут прочитаны (например, с помощью io.ReadAll(resp.Body)), повторное чтение вернет io.EOF (конец файла).
-	if err != nil {
-		return fmt.Errorf("failed to read Response.Body: %w", err)
+	// Проверяем, что сервер ответил корректным HTTP-статусом (например, 200 OK или 403/404, что тоже подтверждает работу Apache)
+	if resp.StatusCode >= 200 && resp.StatusCode < 500 {
+		// Дополнительно можно проверить заголовок "Server"
+		serverHeader := resp.Header.Get("Server") // например, "Apache/2.4.41 (Ubuntu)"
+		fmt.Printf("- It just works! %s\n", serverHeader)
+		//return true, nil
 	}
-	fmt.Printf("%s\n", b)
 
 	return nil
 }
 
 func (c *Client) GetServerInfo(hostPort string) error {
 	// Формат ответа в рамках HTTP это *Response
-	resp, err := http.Get("http://" + hostPort + "/api/v2/status")
+	resp, err := http.Get(hostPort + "/api/v2/status")
 	if err != nil {
 		return fmt.Errorf("network request failed: %w", err)
 	}

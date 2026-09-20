@@ -2,6 +2,7 @@ package client
 
 import (
 	"net/http"
+	"strings"
 )
 
 // Client инкапсулирует настройки для работы с удаленным сервером.
@@ -17,6 +18,10 @@ type Client struct {
 // Мы явно передаем таймаут, избегая глобальных дефолтов.
 // func New(baseURL, username, password string, timeout time.Duration) *Client {
 func New(baseURL, username, password string) *Client {
+	// Добавляем схему при инициализации, если забыли указать
+	if !strings.HasPrefix(baseURL, "http://") && !strings.HasPrefix(baseURL, "https://") {
+		baseURL = "http://" + baseURL
+	}
 	return &Client{
 		httpClient: &http.Client{
 			// Timeout: timeout,

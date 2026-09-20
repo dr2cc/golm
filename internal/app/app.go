@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dr2cc/golm/internal/client"
 	"github.com/dr2cc/golm/internal/config"
 )
 
@@ -19,7 +20,7 @@ import (
 const (
 	// targetURL       = "http://localhost/tradeProfilDm/hs/DataMobileExch/" // "http://localhost/polyMark/hs/DataMobileExch/"
 	publicationName = "polyMark"                    // polyMark / tradeProfilDm
-	apacheAddress   = "192.168.0.75"                // 192.168.0.75 / localhost
+	apacheAddress   = "192.168.0.125"               // 192.168.0.75 / localhost
 	configPath      = `C:\Apache24\conf\httpd.conf` // ssh drk@192.168.0.75 cd /etc/apache2/ apache2.conf // Путь к конфигурационному файлу Apache (для Windows или Linux)
 	requestTimeout  = 5 * time.Second               // Время, после которого считаем, что сервер "умер"
 	warningDuration = 2 * time.Second               // Время, после которого считаем, что сервер "тормозит"
@@ -36,44 +37,14 @@ type DataMobileResponse struct {
 	Data string `json:"data"`
 }
 
-// CheckApache проверяет доступность веб-сервера по заданному URL
-func CheckApache(ctx context.Context, url string) {
-	// Использование HEAD-запроса экономит трафик
-	req, err := http.NewRequestWithContext(ctx, "HEAD", url, nil)
-	if err != nil {
-		fmt.Printf("failed HEAD: %v", err)
-		return //false, err
-	}
-
-	// Настройка стандартного клиента с таймаутом
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		fmt.Printf("failed client.Do: %v", err)
-		return //false, err
-	}
-	defer resp.Body.Close()
-
-	// Проверяем, что сервер ответил корректным HTTP-статусом (например, 200 OK или 403/404, что тоже подтверждает работу Apache)
-	if resp.StatusCode >= 200 && resp.StatusCode < 500 {
-		// Дополнительно можно проверить заголовок "Server"
-		serverHeader := resp.Header.Get("Server") // например, "Apache/2.4.41 (Ubuntu)"
-		fmt.Printf("- It just works! %s\n", serverHeader)
-		//return true, nil
-	}
-
-	//return false, nil
-}
-
 func apacheChecker(ctx context.Context) {
-	CheckApache(ctx, "http://"+apacheAddress)
 
-	// apiClient := client.New(apacheAddress, dbUser, dbPass)
+	apiClient := client.New(apacheAddress, dbUser, dbPass)
 
-	// if err := apiClient.GetApacheInfo(apacheAddress); err != nil {
-	// 	fmt.Printf("ошибка получения информации от сервера: %v\n", err)
-	// 	return
-	// }
+	if err := apiClient.GetApacheInfo(ctx); err != nil {
+		fmt.Printf("ошибка получения информации от сервера: %v\n", err)
+		return
+	}
 }
 
 // 1. Функция чтения версии модуля 1С из Apache
