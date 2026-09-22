@@ -20,7 +20,7 @@ import (
 const (
 	// targetURL       = "http://localhost/tradeProfilDm/hs/DataMobileExch/" // "http://localhost/polyMark/hs/DataMobileExch/"
 	publicationName = "polyMark"                    // polyMark / tradeProfilDm
-	apacheAddress   = "192.168.0.125"               // 192.168.0.75 / localhost
+	apacheAddress   = "192.168.0.75"                // 192.168.0.75 / localhost
 	configPath      = `C:\Apache24\conf\httpd.conf` // ssh drk@192.168.0.75 cd /etc/apache2/ apache2.conf // Путь к конфигурационному файлу Apache (для Windows или Linux)
 	requestTimeout  = 5 * time.Second               // Время, после которого считаем, что сервер "умер"
 	warningDuration = 2 * time.Second               // Время, после которого считаем, что сервер "тормозит"

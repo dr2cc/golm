@@ -27,7 +27,7 @@ func (c *Client) GetApacheInfo(ctx context.Context) error {
 	if resp.StatusCode >= 200 && resp.StatusCode < 500 {
 		// Дополнительно можно проверить заголовок "Server"
 		serverHeader := resp.Header.Get("Server") // например, "Apache/2.4.41 (Ubuntu)"
-		fmt.Printf("- It just works! %s\n", serverHeader)
+		fmt.Printf("- It just works! %s\n", c.baseURL+" - "+serverHeader)
 		//return true, nil
 	}
 
