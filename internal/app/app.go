@@ -19,7 +19,7 @@ import (
 // Константы для настройки проверки
 const (
 	// targetURL       = "http://localhost/tradeProfilDm/hs/DataMobileExch/" // "http://localhost/polyMark/hs/DataMobileExch/"
-	publicationName = "polyMark"                    // polyMark / tradeProfilDm
+	publicationName = "tradeProfilDm"               // polyMark / tradeProfilDm
 	apacheAddress   = "192.168.0.75"                // 192.168.0.75 / localhost
 	configPath      = `C:\Apache24\conf\httpd.conf` // ssh drk@192.168.0.75 cd /etc/apache2/ apache2.conf // Путь к конфигурационному файлу Apache (для Windows или Linux)
 	requestTimeout  = 5 * time.Second               // Время, после которого считаем, что сервер "умер"
@@ -83,7 +83,7 @@ func checkDataMobileService() {
 
 	targetURL := "http://" + apacheAddress + "/" + publicationName + "/hs/DataMobileExch/"
 
-	fmt.Printf("\n- Проверка сервиса DataMobile: %s\n", targetURL)
+	fmt.Printf("\n- Endpoint address (DataMobile): %s\n", targetURL)
 
 	// Засекаем время до создания запроса, чтобы замер был точным
 	startTime := time.Now()
@@ -116,16 +116,16 @@ func checkDataMobileService() {
 			bodyBytes, _ := io.ReadAll(resp.Body)
 			bodyStr := string(bodyBytes)
 
-			fmt.Println("❌ КРИТИЧЕСКАЯ ОШИБКА: Конфликт версий 1С!")
+			fmt.Println("-- status", resp.StatusCode, "Конфликт версий 1С:")
 
 			// Регулярное выражение для поиска версий в круглых скобках
 			re := regexp.MustCompile(`\((\d+\.\d+\.\d+\.\d+)\s*-\s*(\d+\.\d+\.\d+\.\d+)\)`)
 			matches := re.FindStringSubmatch(bodyStr)
 
 			if len(matches) == 3 {
-				fmt.Printf("   📌 В Apache (wsap24-модуль): %s\n", matches[1])
-				fmt.Printf("   📌 На сервере (кластер 1С): %s\n", matches[2])
-				fmt.Println("   💡 Решение: Перепубликуйте базу или обновите путь к wsap24-модулю в httpd.conf!")
+				fmt.Printf("--- Версия wsap24: %s\n", matches[1])
+				fmt.Printf("--- Кластер    1С: %s\n", matches[2])
+				fmt.Println("-- Перепубликуйте базу или обновите путь к wsap24-модулю в httpd.conf.")
 			} else {
 				// Если текст ошибки изменился, выводим как есть
 				fmt.Printf("   Технические детали:\n%s\n", bodyStr)
@@ -134,19 +134,22 @@ func checkDataMobileService() {
 		}
 
 		// Другие ошибки (401, 404, 500 и т.д.)
-		fmt.Printf("-- ОШИБКА СЕРВИСА: Получен HTTP код %d вместо 200 OK\n", resp.StatusCode)
+		fmt.Printf("-- service error: status %d\n", resp.StatusCode)
+		if resp.StatusCode == http.StatusNotFound {
+			fmt.Printf("--- База %s не опубликована на web-сервере %s\n", publicationName, apacheAddress)
+		}
 		if resp.StatusCode == http.StatusUnauthorized {
-			fmt.Println("   💡 Подсказка: Неверный логин или пароль пользователя 1С.")
+			fmt.Println("--- Неверный логин или пароль пользователя 1С.")
 		}
 		return
 	}
 
 	// Проверяем скорость работы (тормоза)
-	fmt.Printf("-- Время ответа сервера: %v\n", duration)
+	fmt.Printf("-- Время ответа сервера: %v", duration)
 	if duration > warningDuration {
-		fmt.Printf("⚠️ ВНИМАНИЕ: Сервер сильно тормозит! Превышен лимит в %v\n", warningDuration)
+		fmt.Printf(" ⚠️ ВНИМАНИЕ: Сервер сильно тормозит! Превышен лимит в %v\n", warningDuration)
 	} else {
-		fmt.Printf("-- Скорость работы в норме\n")
+		fmt.Printf(" Скорость работы в норме\n")
 	}
 
 	// Парсим JSON ответ от 1С
@@ -158,7 +161,7 @@ func checkDataMobileService() {
 	}
 
 	// Выводим статус, который прислала сама 1С
-	fmt.Printf("-- Ответ от 1С: %s\n", strings.TrimSpace(result.Data))
+	fmt.Printf("-- Response: %s\n", strings.TrimSpace(result.Data))
 }
 
 func Run(cfg config.Config) error {
