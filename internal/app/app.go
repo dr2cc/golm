@@ -47,12 +47,12 @@ func apacheChecker(ctx context.Context) {
 	}
 }
 
-// 1. Функция чтения версии модуля 1С из Apache
+// Функция чтения версии модуля 1С из Apache
 func showApache1CModule() {
 	// Простой вариант, без сравнения с expectedVersion
 	file, err := os.Open(configPath)
 	if err != nil {
-		fmt.Printf("❌ ОШИБКА АПАЧА: Не удалось открыть httpd.conf: %v\n", err)
+		fmt.Printf("apache error: failed to open httpd.conf: %v\n", err)
 		return
 	}
 	defer file.Close()
@@ -70,12 +70,12 @@ func showApache1CModule() {
 	}
 
 	if !found {
-		fmt.Println("❓ Модуль '_1cws_module' не найден или закомментирован в httpd.conf")
+		fmt.Println("Модуль '_1cws_module' не найден или закомментирован в httpd.conf")
 	}
 
 }
 
-// 2. Функция проверки доступности и скорости HTTP-сервиса
+// Функция проверки доступности и скорости RESTful-сервиса
 func checkDataMobileService() {
 	client := &http.Client{
 		Timeout: requestTimeout,
@@ -168,7 +168,6 @@ func Run(cfg config.Config) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Логика goapache
 	apacheChecker(ctx)
 
 	// Смотрим конфигурацию Apache (если это локальный компьютер)
@@ -176,7 +175,7 @@ func Run(cfg config.Config) error {
 		showApache1CModule()
 	}
 
-	// Затем тестируем живой сервис
+	// Тестируем наш RESTful-сервис ("рестовый" сервис)
 	checkDataMobileService()
 
 	// // Логика golm
