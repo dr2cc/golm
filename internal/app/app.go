@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"net/http"
 	"time"
 
 	"github.com/dr2cc/golm/internal/config"
@@ -9,18 +10,33 @@ import (
 )
 
 func Run(cfg config.Config) error {
+	// 1. Создаем общий HTTP-клиент с таймаутами
+	httpClient := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	// 2. Initialize domain clients (инициализируем доменные клиенты)
+	dmClient := datamobile.NewClient(datamobile.ApacheAddress, "", "", httpClient)
+	// czClient := lmcz.NewClient("http://localhost:8080", httpClient)
+
+	// // 3. Описываем бизнес-логику взаимодействия между ними
+	// log.Println("Приложение golm запущено...")
+
+	// Пример вызова:
+	// data, err := dmClient.FetchNewData()
+	// err = czClient.SendMark(data.Mark)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	datamobile.ApacheChecker(ctx)
+	// Передаем этот контекст «вглубь» по цепочке вызовов
+	dmClient.ApacheChecker(ctx)
 
-	// Смотрим конфигурацию Apache (если это локальный компьютер)
-	if datamobile.ApacheAddress == "localhost" {
-		datamobile.ShowApache1CModule()
-	}
-
-	// Тестируем наш RESTful-сервис ("РЕСТный" сервис)
-	datamobile.CheckDataMobileService()
+	// err = czClient.VerifyMark(ctx, data.Barcode)
+	// if err != nil {
+	// 	log.Printf("Ошибка проверки марки: %v", err)
+	// 	return
+	// }
 
 	// // Логика golm
 	// var hostPort string

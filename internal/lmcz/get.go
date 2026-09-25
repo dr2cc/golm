@@ -1,38 +1,10 @@
 package client
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"net/http"
 )
-
-func (c *Client) GetApacheInfo(ctx context.Context) error {
-	// Использование HEAD-запроса экономит трафик
-	req, err := http.NewRequestWithContext(ctx, "HEAD", c.baseURL, nil)
-	if err != nil {
-		// fmt.Printf("failed HEAD request: %v", err)
-		return fmt.Errorf("failed HEAD request: %w", err)
-	}
-
-	// Формат ответа в рамках HTTP это *Response
-	resp, err := c.httpClient.Do(req) //http.Get("http://" + hostPort)
-	if err != nil {
-		return fmt.Errorf("network request failed: %w", err)
-	}
-
-	defer resp.Body.Close()
-
-	// Проверяем, что сервер ответил корректным HTTP-статусом (например, 200 OK или 403/404, что тоже подтверждает работу Apache)
-	if resp.StatusCode >= 200 && resp.StatusCode < 500 {
-		// Дополнительно можно проверить заголовок "Server"
-		serverHeader := resp.Header.Get("Server") // например, "Apache/2.4.41 (Ubuntu)"
-		fmt.Printf("- It just works! %s\n", c.baseURL+" - "+serverHeader)
-		//return true, nil
-	}
-
-	return nil
-}
 
 func (c *Client) GetServerInfo(hostPort string) error {
 	// Формат ответа в рамках HTTP это *Response

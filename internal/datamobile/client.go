@@ -11,15 +11,13 @@ import (
 	"regexp"
 	"strings"
 	"time"
-
-	client "github.com/dr2cc/golm/internal/lmcz"
 )
 
 // Константы для настройки проверки
 const (
 	// targetURL       = "http://localhost/tradeProfilDm/hs/DataMobileExch/" // "http://localhost/polyMark/hs/DataMobileExch/"
-	publicationName = "tradeProfilDm"               // polyMark / tradeProfilDm
-	ApacheAddress   = "192.168.0.75"                // 192.168.0.75 / localhost
+	publicationName = "polyMark"                    // polyMark / tradeProfilDm
+	ApacheAddress   = "localhost"                   // 192.168.0.75 / localhost
 	configPath      = `C:\Apache24\conf\httpd.conf` // ssh drk@192.168.0.75 cd /etc/apache2/ apache2.conf // Путь к конфигурационному файлу Apache (для Windows или Linux)
 	requestTimeout  = 5 * time.Second               // Время, после которого считаем, что сервер "умер"
 	warningDuration = 2 * time.Second               // Время, после которого считаем, что сервер "тормозит"
@@ -31,14 +29,64 @@ const (
 	dbPass = ""
 )
 
-func ApacheChecker(ctx context.Context) {
+type Client struct {
+	baseURL    string
+	username   string
+	password   string
+	httpClient *http.Client
+}
 
-	apiClient := client.New(ApacheAddress, dbUser, dbPass)
-
-	if err := apiClient.GetApacheInfo(ctx); err != nil {
-		fmt.Printf("ошибка получения информации от сервера: %v\n", err)
-		return
+// New создает и возвращает настроенный экземпляр Client.
+// Мы явно передаем таймаут, избегая глобальных дефолтов.
+// func New(baseURL, username, password string, timeout time.Duration) *Client {
+func NewClient(baseURL, username, password string, httpClient *http.Client) *Client {
+	// Добавляем схему при инициализации, если забыли указать
+	if !strings.HasPrefix(baseURL, "http://") && !strings.HasPrefix(baseURL, "https://") {
+		baseURL = "http://" + baseURL
 	}
+	return &Client{
+		baseURL:    baseURL,
+		username:   username,
+		password:   password,
+		httpClient: httpClient,
+	}
+}
+
+func (c *Client) ApacheChecker(ctx context.Context) {
+	// Использование HEAD-запроса экономит трафик
+	req, err := http.NewRequestWithContext(ctx, "HEAD", c.baseURL, nil)
+	if err != nil {
+		fmt.Printf("- failed HEAD request: %v\n", err)
+		return // fmt.Errorf("failed HEAD request: %w", err)
+	}
+
+	// Формат ответа в рамках HTTP это *Response
+	resp, err := c.httpClient.Do(req) //http.Get("http://" + hostPort)
+	if err != nil {
+		fmt.Printf("- network request failed: %v\n", err)
+		return // fmt.Errorf("network request failed: %w", err)
+	}
+
+	defer resp.Body.Close()
+
+	// Проверяем, что сервер ответил корректным HTTP-статусом (например, 200 OK или 403/404, что тоже подтверждает работу Apache)
+	if resp.StatusCode >= 200 && resp.StatusCode < 500 {
+		// Дополнительно можно проверить заголовок "Server"
+		serverHeader := resp.Header.Get("Server") // например, "Apache/2.4.41 (Ubuntu)"
+		fmt.Printf("- It just works! %s\n", c.baseURL+" - "+serverHeader)
+
+		// Смотрим конфигурацию Apache (если это локальный компьютер)
+		// 25.09 перестал работать! Пишет при любом адресе "apache error: failed to open httpd.conf: open C:\Apache24\conf\httpd.conf: no such file or directory"
+		// Если ввести ApacheAddress   = "localhost" то ошибка возникает выше: "- network request failed: Head "http://localhost": dial tcp 127.0.0.1:80: connect: connection refused"
+		if ApacheAddress == "localhost" { // "localhost""192.168.0.13" {
+			ShowApache1CModule()
+		}
+		// Тестируем наш RESTful-сервис ("РЕСТный" сервис)
+		CheckDataMobileService()
+		//return true, nil
+	}
+
+	// return nil
 }
 
 // Функция чтения версии модуля 1С из Apache
@@ -46,7 +94,7 @@ func ShowApache1CModule() {
 	// Простой вариант, без сравнения с expectedVersion
 	file, err := os.Open(configPath)
 	if err != nil {
-		fmt.Printf("apache error: failed to open httpd.conf: %v\n", err)
+		fmt.Printf("- apache error: failed to open httpd.conf: %v\n", err)
 		return
 	}
 	defer file.Close()
@@ -85,7 +133,7 @@ func CheckDataMobileService() {
 	// 1. Создаем объект HTTP-запроса (метод GET)
 	req, err := http.NewRequest("GET", targetURL, nil)
 	if err != nil {
-		fmt.Printf("❌ ОШИБКА: Не удалось создать HTTP-запрос. Детали: %v\n", err)
+		fmt.Printf("-- Не удалось создать HTTP-запрос. Детали: %v\n", err)
 		return
 	}
 
@@ -98,7 +146,7 @@ func CheckDataMobileService() {
 
 	// Проверка на полное падение сервера или таймаут
 	if err != nil {
-		fmt.Printf("❌ КРИТИЧЕСКАЯ ОШИБКА: Сервер не отвечает или упал!\n   Детали: %v\n", err)
+		fmt.Printf("-- Сервер не отвечает или упал!\n   Детали: %v\n", err)
 		return
 	}
 	defer resp.Body.Close()
