@@ -11,23 +11,25 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/dr2cc/golm/internal/config"
 )
 
-// Константы для настройки проверки
-const (
-	// targetURL       = "http://localhost/tradeProfilDm/hs/DataMobileExch/" // "http://localhost/polyMark/hs/DataMobileExch/"
-	publicationName = "polyMark"                    // polyMark / tradeProfilDm
-	ApacheAddress   = "localhost"                   // 192.168.0.75 / localhost
-	configPath      = `C:\Apache24\conf\httpd.conf` // ssh drk@192.168.0.75 cd /etc/apache2/ apache2.conf // Путь к конфигурационному файлу Apache (для Windows или Linux)
-	requestTimeout  = 5 * time.Second               // Время, после которого считаем, что сервер "умер"
-	warningDuration = 2 * time.Second               // Время, после которого считаем, что сервер "тормозит"
-	// expectedVersion = "8.3.27.2214"                                       // Ожидаемая версия платформы 1С
+// // Константы для настройки проверки
+// const (
+// 	// targetURL       = "http://localhost/tradeProfilDm/hs/DataMobileExch/" // "http://localhost/polyMark/hs/DataMobileExch/"
+// 	publicationName = "polyMark"                    // polyMark / tradeProfilDm
+// 	ApacheAddress   = "localhost"                   // 192.168.0.75 / localhost
+// 	configPath      = `C:\Apache24\conf\httpd.conf` // ssh drk@192.168.0.75 cd /etc/apache2/ apache2.conf // Путь к конфигурационному файлу Apache (для Windows или Linux)
+// 	requestTimeout  = 5 * time.Second               // Время, после которого считаем, что сервер "умер"
+// 	warningDuration = 2 * time.Second               // Время, после которого считаем, что сервер "тормозит"
+// 	// expectedVersion = "8.3.27.2214"                                       // Ожидаемая версия платформы 1С
 
-	// НАСТРОЙКА АВТОРИЗАЦИИ 1С
-	// Укажите имя пользователя и пароль, под которыми ТСД подключаются к 1С
-	dbUser = "admin"
-	dbPass = ""
-)
+// 	// НАСТРОЙКА АВТОРИЗАЦИИ 1С
+// 	// Укажите имя пользователя и пароль, под которыми ТСД подключаются к 1С
+// 	dbUser = "admin"
+// 	dbPass = ""
+// )
 
 type Client struct {
 	baseURL    string
@@ -39,20 +41,20 @@ type Client struct {
 // New создает и возвращает настроенный экземпляр Client.
 // Мы явно передаем таймаут, избегая глобальных дефолтов.
 // func New(baseURL, username, password string, timeout time.Duration) *Client {
-func NewClient(baseURL, username, password string, httpClient *http.Client) *Client {
+func NewClient(datamobile config.DataMobileConfig, httpClient *http.Client) *Client {
 	// Добавляем схему при инициализации, если забыли указать
-	if !strings.HasPrefix(baseURL, "http://") && !strings.HasPrefix(baseURL, "https://") {
-		baseURL = "http://" + baseURL
+	if !strings.HasPrefix(datamobile.ApacheAddress, "http://") && !strings.HasPrefix(datamobile.ApacheAddress, "https://") {
+		datamobile.ApacheAddress = "http://" + datamobile.ApacheAddress
 	}
 	return &Client{
-		baseURL:    baseURL,
-		username:   username,
-		password:   password,
+		baseURL:    datamobile.ApacheAddress,
+		username:   datamobile.DbUser,
+		password:   datamobile.DbPass,
 		httpClient: httpClient,
 	}
 }
 
-func (c *Client) ApacheChecker(ctx context.Context) {
+func (c *Client) ApacheChecker(ctx context.Context, datamobile config.DataMobileConfig) {
 	// Использование HEAD-запроса экономит трафик
 	req, err := http.NewRequestWithContext(ctx, "HEAD", c.baseURL, nil)
 	if err != nil {
@@ -76,13 +78,11 @@ func (c *Client) ApacheChecker(ctx context.Context) {
 		fmt.Printf("- It just works! %s\n", c.baseURL+" - "+serverHeader)
 
 		// Смотрим конфигурацию Apache (если это локальный компьютер)
-		// 25.09 перестал работать! Пишет при любом адресе "apache error: failed to open httpd.conf: open C:\Apache24\conf\httpd.conf: no such file or directory"
-		// Если ввести ApacheAddress   = "localhost" то ошибка возникает выше: "- network request failed: Head "http://localhost": dial tcp 127.0.0.1:80: connect: connection refused"
-		if ApacheAddress == "localhost" { // "localhost""192.168.0.13" {
-			ShowApache1CModule()
+		if datamobile.ApacheAddress == "localhost" { // "localhost""192.168.0.13" {
+			ShowApache1CModule(datamobile.ConfigPath)
 		}
 		// Тестируем наш RESTful-сервис ("РЕСТный" сервис)
-		CheckDataMobileService()
+		CheckDataMobileService(datamobile)
 		//return true, nil
 	}
 
@@ -90,7 +90,7 @@ func (c *Client) ApacheChecker(ctx context.Context) {
 }
 
 // Функция чтения версии модуля 1С из Apache
-func ShowApache1CModule() {
+func ShowApache1CModule(configPath string) {
 	// Простой вариант, без сравнения с expectedVersion
 	file, err := os.Open(configPath)
 	if err != nil {
@@ -105,7 +105,7 @@ func ShowApache1CModule() {
 	for scanner.Scan() {
 		line := scanner.Text()
 		if strings.Contains(line, "_1cws_module") && strings.Contains(line, "LoadModule") {
-			fmt.Printf("- Модуль 1С в конфигурации Apache:\n   %s\n", strings.TrimSpace(line))
+			fmt.Printf("- Модуль 1С в конфигурации Apache:\n   %s", strings.TrimSpace(line))
 			found = true
 			break
 		}
@@ -118,14 +118,14 @@ func ShowApache1CModule() {
 }
 
 // Функция проверки доступности и скорости RESTful-сервиса
-func CheckDataMobileService() {
+func CheckDataMobileService(datamobile config.DataMobileConfig) {
 	client := &http.Client{
-		Timeout: requestTimeout,
+		Timeout: datamobile.RequestTimeout,
 	}
 
-	targetURL := "http://" + ApacheAddress + "/" + publicationName + "/hs/DataMobileExch/"
+	targetURL := "http://" + datamobile.ApacheAddress + "/" + datamobile.PublicationName + "/hs/DataMobileExch/"
 
-	fmt.Printf("\n- Endpoint address (DataMobile): %s\n", targetURL)
+	fmt.Printf("\n- GET to endpoint (DataMobile): %s\n", targetURL)
 
 	// Засекаем время до создания запроса, чтобы замер был точным
 	startTime := time.Now()
@@ -138,7 +138,7 @@ func CheckDataMobileService() {
 	}
 
 	// 2. Добавляем Базовую Авторизацию (Basic Auth)
-	req.SetBasicAuth(dbUser, dbPass)
+	req.SetBasicAuth(datamobile.DbUser, datamobile.DbPass)
 
 	// 3. Выполняем запрос через клиент
 	resp, err := client.Do(req)
@@ -178,7 +178,7 @@ func CheckDataMobileService() {
 		// Другие ошибки (401, 404, 500 и т.д.)
 		fmt.Printf("-- service error: status %d\n", resp.StatusCode)
 		if resp.StatusCode == http.StatusNotFound {
-			fmt.Printf("--- База %s не опубликована на web-сервере %s\n", publicationName, ApacheAddress)
+			fmt.Printf("--- База %s не опубликована на web-сервере %s\n", datamobile.PublicationName, datamobile.ApacheAddress)
 		}
 		if resp.StatusCode == http.StatusUnauthorized {
 			fmt.Println("--- Неверный логин или пароль пользователя 1С.")
@@ -188,8 +188,8 @@ func CheckDataMobileService() {
 
 	// Проверяем скорость работы (тормоза)
 	fmt.Printf("-- Время ответа сервера: %v", duration)
-	if duration > warningDuration {
-		fmt.Printf(" ⚠️ ВНИМАНИЕ: Сервер сильно тормозит! Превышен лимит в %v\n", warningDuration)
+	if duration > datamobile.WarningDuration {
+		fmt.Printf(" Сервер сильно тормозит! Превышен лимит в %v\n", datamobile.WarningDuration)
 	} else {
 		fmt.Printf(" Скорость работы в норме\n")
 	}
@@ -198,10 +198,10 @@ func CheckDataMobileService() {
 	var result DataMobileResponse
 	err = json.NewDecoder(resp.Body).Decode(&result)
 	if err != nil {
-		fmt.Printf("❌ ОШИБКА JSON: Не удалось прочитать ответ от 1С. Детали: %v\n", err)
+		fmt.Printf(" ОШИБКА JSON: Не удалось прочитать ответ от 1С. Детали: %v\n", err)
 		return
 	}
 
 	// Выводим статус, который прислала сама 1С
-	fmt.Printf("-- Response: %s\n", strings.TrimSpace(result.Data))
+	fmt.Printf("-- data: %s\n", strings.TrimSpace(result.Data))
 }

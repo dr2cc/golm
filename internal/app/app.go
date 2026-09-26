@@ -9,14 +9,31 @@ import (
 	"github.com/dr2cc/golm/internal/datamobile"
 )
 
+// // isWSL проверяет, запущен ли код внутри подсистемы WSL
+// func isWSL() bool {
+// 	version, err := os.ReadFile("/proc/version")
+// 	if err != nil {
+// 		return false
+// 	}
+// 	// Переводим в нижний регистр для надежности
+// 	content := strings.ToLower(string(version))
+// 	return strings.Contains(content, "microsoft") || strings.Contains(content, "wsl")
+// }
+
 func Run(cfg config.Config) error {
 	// 1. Создаем общий HTTP-клиент с таймаутами
 	httpClient := &http.Client{
 		Timeout: 10 * time.Second,
 	}
 
+	// // Простая проверка перед отправкой запроса
+	// if isWSL() && (strings.Contains(datamobile.ApacheAddress, "127.0.0.1") || strings.Contains(datamobile.ApacheAddress, "localhost")) {
+	// 	fmt.Println("   Внимание: Вы запускаете код внутри WSL2 и обращаетесь к локальному интерфейсу (localhost/127.0.0.1).")
+	// 	fmt.Println("   Если веб-сервер запущен на Windows, запрос завершится ошибкой 'connection refused'.")
+	// }
+
 	// 2. Initialize domain clients (инициализируем доменные клиенты)
-	dmClient := datamobile.NewClient(datamobile.ApacheAddress, "", "", httpClient)
+	dmClient := datamobile.NewClient(cfg.DataMobile, httpClient)
 	// czClient := lmcz.NewClient("http://localhost:8080", httpClient)
 
 	// // 3. Описываем бизнес-логику взаимодействия между ними
@@ -30,7 +47,7 @@ func Run(cfg config.Config) error {
 	defer cancel()
 
 	// Передаем этот контекст «вглубь» по цепочке вызовов
-	dmClient.ApacheChecker(ctx)
+	dmClient.ApacheChecker(ctx, cfg.DataMobile)
 
 	// err = czClient.VerifyMark(ctx, data.Barcode)
 	// if err != nil {

@@ -4,10 +4,28 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
+// Выносим в отдельный тип
+type DataMobileConfig struct {
+	PublicationName string
+	ApacheAddress   string
+	ConfigPath      string
+	RequestTimeout  time.Duration
+	WarningDuration time.Duration
+	DbUser          string
+	DbPass          string
+}
+
+// type LMCZ struct{
+// 	BaseURL string `env:"LMCZ_BASE_URL" env-required:"true"`
+// }
+
 type Config struct {
+	// Тоже оформить структурой типа
+	// LMCZ LMCZ
 	Command        string // "get" или "post"
 	ScannerTimeout time.Duration
 	Host           string
@@ -16,6 +34,8 @@ type Config struct {
 	Username       string // post
 	Password       string // post
 	Token          string // post
+	//
+	DataMobile DataMobileConfig
 }
 
 // Функция для вывода общей справки по приложению
@@ -32,7 +52,21 @@ func printGlobalUsage() {
 // Если в будущем будет нужно читать переменные окружения или .env файл,
 // поменяется код только внутри этой функции.
 func New() (*Config, error) {
-	cfg := &Config{}
+	cfg := &Config{
+		// Инициализируем вложенную структуру DataMobile
+		DataMobile: DataMobileConfig{
+			PublicationName: "polyMark",
+			ApacheAddress:   "localhost",                   // 192.168.0.75 / localhost
+			ConfigPath:      `C:\Apache24\conf\httpd.conf`, // ssh drk@192.168.0.75 cd /etc/apache2/ apache2.conf // Путь к конфигурационному файлу Apache (для Windows или Linux)
+			RequestTimeout:  5 * time.Second,               // Используем тип time.Duration
+			WarningDuration: 2 * time.Second,
+			DbUser:          "admin",
+			DbPass:          "",
+		},
+	}
+
+	// Вызываем проверку сразу при создании конфига
+	cfg.validateEnvironment()
 
 	// // ❌ Текущая реализация функции config.New() нарушает принцип единственной ответственности (Single Responsibility Principle)
 	// // и содержит архитектурный антипаттерн,
@@ -104,11 +138,25 @@ func New() (*Config, error) {
 	return cfg, nil
 }
 
-// return &Config{
-// 	ScannerTimeout: *timeout,
-// 	Host:           *host,
-// 	Subnet:         *subnet,
-// 	Port:           *port,
-// 	Username:       *username,
-// 	Password:       *password,
-// }, nil
+// Внутренний метод для проверки потенциальных проблем среды
+func (c *Config) validateEnvironment() {
+	if !isWSL() {
+		return
+	}
+
+	// Если мы в WSL и адрес локальный — выводим предупреждение
+	if strings.Contains(c.DataMobile.ApacheAddress, "127.0.0.1") || strings.Contains(c.DataMobile.ApacheAddress, "localhost") {
+		fmt.Println("[CONFIG WARNING]: Вы запускаете код внутри WSL2 и запрашиваете localhost (127.0.0.1).")
+		fmt.Println("Если сетевой режим WSL не изменен на 'mirrored', запрос завершится ошибкой 'connection refused'.")
+	}
+}
+
+// Сама функция проверки среды (не экспортируется наружу, так как нужна только здесь)
+func isWSL() bool {
+	version, err := os.ReadFile("/proc/version")
+	if err != nil {
+		return false
+	}
+	content := strings.ToLower(string(version))
+	return strings.Contains(content, "microsoft") || strings.Contains(content, "wsl")
+}
