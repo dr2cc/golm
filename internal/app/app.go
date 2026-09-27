@@ -2,58 +2,41 @@ package app
 
 import (
 	"context"
+	"log"
 	"net/http"
-	"time"
 
 	"github.com/dr2cc/golm/internal/config"
 	"github.com/dr2cc/golm/internal/datamobile"
 )
 
-// // isWSL проверяет, запущен ли код внутри подсистемы WSL
-// func isWSL() bool {
-// 	version, err := os.ReadFile("/proc/version")
-// 	if err != nil {
-// 		return false
-// 	}
-// 	// Переводим в нижний регистр для надежности
-// 	content := strings.ToLower(string(version))
-// 	return strings.Contains(content, "microsoft") || strings.Contains(content, "wsl")
-// }
-
 func Run(cfg config.Config) error {
-	// 1. Создаем общий HTTP-клиент с таймаутами
-	httpClient := &http.Client{
-		Timeout: 10 * time.Second,
-	}
-
-	// // Простая проверка перед отправкой запроса
-	// if isWSL() && (strings.Contains(datamobile.ApacheAddress, "127.0.0.1") || strings.Contains(datamobile.ApacheAddress, "localhost")) {
-	// 	fmt.Println("   Внимание: Вы запускаете код внутри WSL2 и обращаетесь к локальному интерфейсу (localhost/127.0.0.1).")
-	// 	fmt.Println("   Если веб-сервер запущен на Windows, запрос завершится ошибкой 'connection refused'.")
-	// }
-
-	// 2. Initialize domain clients (инициализируем доменные клиенты)
-	dmClient := datamobile.NewClient(cfg.DataMobile, httpClient)
-	// czClient := lmcz.NewClient("http://localhost:8080", httpClient)
-
-	// // 3. Описываем бизнес-логику взаимодействия между ними
-	// log.Println("Приложение golm запущено...")
-
-	// Пример вызова:
-	// data, err := dmClient.FetchNewData()
-	// err = czClient.SendMark(data.Mark)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.DataMobile.RequestTimeout)
 	defer cancel()
 
-	// Передаем этот контекст «вглубь» по цепочке вызовов
-	dmClient.ApacheChecker(ctx, cfg.DataMobile)
+	// 1. Создаем общий HTTP-клиент с таймаутами
+	httpClient := &http.Client{
+		Timeout: cfg.DataMobile.RequestTimeout,
+	}
 
-	// err = czClient.VerifyMark(ctx, data.Barcode)
-	// if err != nil {
-	// 	log.Printf("Ошибка проверки марки: %v", err)
-	// 	return
-	// }
+	// 2. Initialize domain clients (инициализируем доменные клиенты)
+	if cfg.LaunchDataMobile {
+		log.Println("Инициализация клиента DataMobile...")
+		dmClient := datamobile.NewClient(cfg.DataMobile, httpClient)
+		// Передаем этот контекст «вглубь» по цепочке вызовов
+		dmClient.ApacheChecker(ctx, cfg.DataMobile)
+	}
+
+	if cfg.LaunchLMCZ {
+		log.Println("Инициализация клиента ЛМ ЧЗ...")
+		// czClient := lmcz.NewClient(cfg.LMCZ.BaseURL, httpClient)
+		// _ = czClient
+	}
+
+	if cfg.LaunchDataMobile || cfg.LaunchLMCZ {
+		select {}
+	} else {
+		log.Println("Hи один клиент не был выбран через флаги запуска.")
+	}
 
 	// // Логика golm
 	// var hostPort string

@@ -15,6 +15,8 @@ func main() {
 	}
 
 	// Run
+	// Явное лучше неявного (Explicit over Implicit):
+	// Функция app.Run(cfg) декларирует: «Мне для работы нужен cfg»
 	if err := app.Run(*cfg); err != nil {
 		log.Fatalf("error: %s", err)
 	}

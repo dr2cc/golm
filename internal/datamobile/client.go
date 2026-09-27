@@ -78,7 +78,7 @@ func (c *Client) ApacheChecker(ctx context.Context, datamobile config.DataMobile
 		fmt.Printf("- It just works! %s\n", c.baseURL+" - "+serverHeader)
 
 		// Смотрим конфигурацию Apache (если это локальный компьютер)
-		if datamobile.ApacheAddress == "localhost" { // "localhost""192.168.0.13" {
+		if strings.Contains(datamobile.ApacheAddress, "127.0.0.1") || strings.Contains(datamobile.ApacheAddress, "localhost") { // "localhost""192.168.0.13" {
 			ShowApache1CModule(datamobile.ConfigPath)
 		}
 		// Тестируем наш RESTful-сервис ("РЕСТный" сервис)

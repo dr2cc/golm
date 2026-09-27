@@ -1,0 +1,19 @@
+env: "development"
+
+# Флаги запуска модулей по умолчанию (флаги CLI могут их переопределить)
+launch_datamobile: false
+launch_lmcz: false
+
+datamobile:
+  publication_name: "polyMark"
+  apache_address: "localhost"
+  # 192.168.0.75 / localhost
+  config_path: C:/Apache24/conf/httpd.conf
+  # ssh drk@192.168.0.75 cd /etc/apache2/ apache2.conf // Путь к конфигурационному файлу Apache (для Windows или Linux)
+  request_timeout: "10s"   # Будет автоматически распарсено в time.Duration
+  warning_duration: "2s"
+  db_user: "admin"
+  db_pass: ""
+
+lmcz:
+  base_url: "http://localhost:5000"

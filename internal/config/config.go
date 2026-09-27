@@ -1,22 +1,25 @@
 package config
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"go.yaml.in/yaml/v2"
 )
 
 // Выносим в отдельный тип
 type DataMobileConfig struct {
-	PublicationName string
-	ApacheAddress   string
-	ConfigPath      string
-	RequestTimeout  time.Duration
-	WarningDuration time.Duration
-	DbUser          string
-	DbPass          string
+	PublicationName string        `yaml:"publication_name"`
+	ApacheAddress   string        `yaml:"apache_address"`
+	ConfigPath      string        `yaml:"config_path"`
+	RequestTimeout  time.Duration `yaml:"request_timeout"`
+	WarningDuration time.Duration `yaml:"warning_duration"`
+	DbUser          string        `yaml:"db_user"`
+	DbPass          string        `yaml:"db_pass"`
 }
 
 // type LMCZ struct{
@@ -24,7 +27,15 @@ type DataMobileConfig struct {
 // }
 
 type Config struct {
-	// Тоже оформить структурой типа
+	Env              string           `yaml:"env"`
+	LaunchDataMobile bool             `yaml:"launch_datamobile"`
+	LaunchLMCZ       bool             `yaml:"launch_lmcz"`
+	DataMobile       DataMobileConfig `yaml:"datamobile"`
+	LMCZ             struct {
+		BaseURL string `yaml:"base_url"`
+	} `yaml:"lmcz"`
+	// Прежняя (только для ЛМ ЧЗ) Config.
+	// Видимо добавить в структуру LMCZ, но сделать ее как DataMobile
 	// LMCZ LMCZ
 	Command        string // "get" или "post"
 	ScannerTimeout time.Duration
@@ -34,8 +45,6 @@ type Config struct {
 	Username       string // post
 	Password       string // post
 	Token          string // post
-	//
-	DataMobile DataMobileConfig
 }
 
 // Функция для вывода общей справки по приложению
@@ -52,23 +61,50 @@ func printGlobalUsage() {
 // Если в будущем будет нужно читать переменные окружения или .env файл,
 // поменяется код только внутри этой функции.
 func New() (*Config, error) {
-	cfg := &Config{
-		// Инициализируем вложенную структуру DataMobile
-		DataMobile: DataMobileConfig{
-			PublicationName: "polyMark",
-			ApacheAddress:   "localhost",                   // 192.168.0.75 / localhost
-			ConfigPath:      `C:\Apache24\conf\httpd.conf`, // ssh drk@192.168.0.75 cd /etc/apache2/ apache2.conf // Путь к конфигурационному файлу Apache (для Windows или Linux)
-			RequestTimeout:  5 * time.Second,               // Используем тип time.Duration
-			WarningDuration: 2 * time.Second,
-			DbUser:          "admin",
-			DbPass:          "",
-		},
+	// 1. Инициализируем пустую структуру
+	cfg := &Config{}
+
+	// 2. Читаем файл конфигурации
+	filename := "config.yaml"
+	fileBytes, err := os.ReadFile(filename)
+	if err != nil {
+		return nil, fmt.Errorf("не удалось прочитать файл конфигурации %s: %w", filename, err)
 	}
 
-	// Вызываем проверку сразу при создании конфига
-	cfg.validateEnvironment()
+	// 3. Парсим YAML в структуру.
+	// Библиотека yaml.v3 умеет сама превращать строки вида "10s" или "5m" в тип time.Duration!
+	if err := yaml.Unmarshal(fileBytes, cfg); err != nil {
+		return nil, fmt.Errorf("ошибка парсинга YAML: %w", err)
+	}
 
-	// // ❌ Текущая реализация функции config.New() нарушает принцип единственной ответственности (Single Responsibility Principle)
+	// 4. Привязываем флаги командной строки к полям созданного объекта.
+	// В качестве дефолтных значений передаем то, что УЖЕ прочитано из файла YAML.
+	flag.BoolVar(&cfg.LaunchDataMobile, "datam", cfg.LaunchDataMobile, "Запустить клиент DataMobile-Apache-1C")
+	flag.BoolVar(&cfg.LaunchLMCZ, "lmcz", cfg.LaunchLMCZ, "Запустить локальный модуль Честный Знак")
+
+	// 5. Парсим флаги.
+	// Если пользователь передаст флаг в терминале (например, -lmcz=true),
+	// он перепишет значение, которое было в config.yaml.
+	flag.Parse()
+
+	// // Вариант 02 (apache + 1С)
+	// cfg := &Config{
+	// 	// Инициализируем вложенную структуру DataMobile
+	// 	DataMobile: DataMobileConfig{
+	// 		PublicationName: "polyMark",
+	// 		ApacheAddress:   "localhost",                   // 192.168.0.75 / localhost
+	// 		ConfigPath:      `C:\Apache24\conf\httpd.conf`, // ssh drk@192.168.0.75 cd /etc/apache2/ apache2.conf // Путь к конфигурационному файлу Apache (для Windows или Linux)
+	// 		RequestTimeout:  5 * time.Second,               // Используем тип time.Duration
+	// 		WarningDuration: 2 * time.Second,
+	// 		DbUser:          "admin",
+	// 		DbPass:          "",
+	// 	},
+	// }
+
+	// // Вызываем проверку сразу при создании конфига
+	// cfg.validateEnvironment()
+
+	// // Вариант 01 ❌ Текущая реализация функции config.New() нарушает принцип единственной ответственности (Single Responsibility Principle)
 	// // и содержит архитектурный антипаттерн,
 	// // так как конфигуратор берет на себя роль управления жизненным циклом приложения (os.Exit).
 
