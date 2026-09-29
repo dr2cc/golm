@@ -8,44 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"go.yaml.in/yaml/v2"
+	"go.yaml.in/yaml/v3"
 )
-
-// Выносим в отдельный тип
-type DataMobileConfig struct {
-	PublicationName string        `yaml:"publication_name"`
-	ApacheAddress   string        `yaml:"apache_address"`
-	ConfigPath      string        `yaml:"config_path"`
-	RequestTimeout  time.Duration `yaml:"request_timeout"`
-	WarningDuration time.Duration `yaml:"warning_duration"`
-	DbUser          string        `yaml:"db_user"`
-	DbPass          string        `yaml:"db_pass"`
-}
-
-// type LMCZ struct{
-// 	BaseURL string `env:"LMCZ_BASE_URL" env-required:"true"`
-// }
-
-type Config struct {
-	Env              string           `yaml:"env"`
-	LaunchDataMobile bool             `yaml:"launch_datamobile"`
-	LaunchLMCZ       bool             `yaml:"launch_lmcz"`
-	DataMobile       DataMobileConfig `yaml:"datamobile"`
-	LMCZ             struct {
-		BaseURL string `yaml:"base_url"`
-	} `yaml:"lmcz"`
-	// Прежняя (только для ЛМ ЧЗ) Config.
-	// Видимо добавить в структуру LMCZ, но сделать ее как DataMobile
-	// LMCZ LMCZ
-	Command        string // "get" или "post"
-	ScannerTimeout time.Duration
-	Host           string
-	Port           string
-	Subnet         string // get
-	Username       string // post
-	Password       string // post
-	Token          string // post
-}
 
 // Функция для вывода общей справки по приложению
 func printGlobalUsage() {
@@ -57,10 +21,47 @@ func printGlobalUsage() {
 	fmt.Fprintf(os.Stderr, "Используйте \"%s <команда> -h\" для просмотра флагов конкретной команды.\n", exeName)
 }
 
+// Выносим в отдельный тип
+type DataMobileConfig struct {
+	PublicationName string `yaml:"publication_name"`
+	ApacheAddress   string `yaml:"apache_address"`
+	ApacheConfPath  string `yaml:"apache_conf_path"`
+	DmUser          string `yaml:"dm_user"`
+	DmPass          string `yaml:"dm_pass"`
+}
+
+// type LMCZ struct{
+// 	BaseURL string `env:"LMCZ_BASE_URL" env-required:"true"`
+// }
+
+type Config struct {
+	Env              string           `yaml:"env"`
+	RequestTimeout   time.Duration    `yaml:"request_timeout"`
+	WarningDuration  time.Duration    `yaml:"warning_duration"`
+	LaunchDataMobile bool             `yaml:"launch_datamobile"`
+	LaunchLMCZ       bool             `yaml:"launch_lmcz"`
+	DataMobile       DataMobileConfig `yaml:"datamobile"`
+	LMCZ             struct {
+		BaseURL string `yaml:"base_url"`
+	} `yaml:"lmcz"`
+	// // Прежняя (только для ЛМ ЧЗ) Config.
+	// // Видимо добавить в структуру LMCZ, но сделать ее как DataMobile
+	// // LMCZ LMCZ
+	// Command        string // "get" или "post"
+	// ScannerTimeout time.Duration
+	// Host           string
+	// Port           string
+	// Subnet         string // get
+	// Username       string // post
+	// Password       string // post
+	// Token          string // post
+}
+
 // New парсит флаги и возвращает готовую конфигурацию.
 // Если в будущем будет нужно читать переменные окружения или .env файл,
 // поменяется код только внутри этой функции.
 func New() (*Config, error) {
+	// Вариант 03.
 	// 1. Инициализируем пустую структуру
 	cfg := &Config{}
 
@@ -72,20 +73,23 @@ func New() (*Config, error) {
 	}
 
 	// 3. Парсим YAML в структуру.
-	// Библиотека yaml.v3 умеет сама превращать строки вида "10s" или "5m" в тип time.Duration!
+	// Библиотека yaml.v3 превращает строки вида "10s" или "5m" в тип time.Duration
 	if err := yaml.Unmarshal(fileBytes, cfg); err != nil {
 		return nil, fmt.Errorf("ошибка парсинга YAML: %w", err)
 	}
 
 	// 4. Привязываем флаги командной строки к полям созданного объекта.
-	// В качестве дефолтных значений передаем то, что УЖЕ прочитано из файла YAML.
-	flag.BoolVar(&cfg.LaunchDataMobile, "datam", cfg.LaunchDataMobile, "Запустить клиент DataMobile-Apache-1C")
-	flag.BoolVar(&cfg.LaunchLMCZ, "lmcz", cfg.LaunchLMCZ, "Запустить локальный модуль Честный Знак")
+	// В качестве дефолтных значений передаем то, что прочитано из файла YAML.
+	flag.BoolVar(&cfg.LaunchDataMobile, "dm", cfg.LaunchDataMobile, "Запустить клиент DataMobile-Apache-1C")
+	flag.BoolVar(&cfg.LaunchLMCZ, "lm", cfg.LaunchLMCZ, "Запустить тест ЛМ ЧЗ")
 
 	// 5. Парсим флаги.
-	// Если пользователь передаст флаг в терминале (например, -lmcz=true),
-	// он перепишет значение, которое было в config.yaml.
+	// Если пользователь передаст флаг в терминале (-dm),
+	// он перепишет значение, которое было в config.yaml
 	flag.Parse()
+
+	// Вызываем проверку проблем среды уже при создании конфига
+	cfg.validateEnvironment()
 
 	// // Вариант 02 (apache + 1С)
 	// cfg := &Config{

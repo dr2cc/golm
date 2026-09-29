@@ -10,12 +10,13 @@ import (
 )
 
 func Run(cfg config.Config) error {
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.DataMobile.RequestTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.RequestTimeout)
+	// ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	// 1. Создаем общий HTTP-клиент с таймаутами
 	httpClient := &http.Client{
-		Timeout: cfg.DataMobile.RequestTimeout,
+		Timeout: cfg.RequestTimeout,
 	}
 
 	// 2. Initialize domain clients (инициализируем доменные клиенты)
@@ -23,7 +24,7 @@ func Run(cfg config.Config) error {
 		log.Println("Инициализация клиента DataMobile...")
 		dmClient := datamobile.NewClient(cfg.DataMobile, httpClient)
 		// Передаем этот контекст «вглубь» по цепочке вызовов
-		dmClient.ApacheChecker(ctx, cfg.DataMobile)
+		dmClient.ApacheChecker(ctx)
 	}
 
 	if cfg.LaunchLMCZ {

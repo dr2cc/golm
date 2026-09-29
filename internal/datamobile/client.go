@@ -3,14 +3,10 @@ package datamobile
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
-	"regexp"
 	"strings"
-	"time"
 
 	"github.com/dr2cc/golm/internal/config"
 )
@@ -32,9 +28,7 @@ import (
 // )
 
 type Client struct {
-	baseURL    string
-	username   string
-	password   string
+	cfg        config.DataMobileConfig
 	httpClient *http.Client
 }
 
@@ -47,16 +41,15 @@ func NewClient(datamobile config.DataMobileConfig, httpClient *http.Client) *Cli
 		datamobile.ApacheAddress = "http://" + datamobile.ApacheAddress
 	}
 	return &Client{
-		baseURL:    datamobile.ApacheAddress,
-		username:   datamobile.DbUser,
-		password:   datamobile.DbPass,
+		cfg:        datamobile,
 		httpClient: httpClient,
 	}
 }
 
-func (c *Client) ApacheChecker(ctx context.Context, datamobile config.DataMobileConfig) {
+func (c *Client) ApacheChecker(ctx context.Context) {
 	// Использование HEAD-запроса экономит трафик
-	req, err := http.NewRequestWithContext(ctx, "HEAD", c.baseURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "HEAD", c.cfg.ApacheAddress, nil)
+	fmt.Println(c.cfg.ApacheAddress)
 	if err != nil {
 		fmt.Printf("- failed HEAD request: %v\n", err)
 		return // fmt.Errorf("failed HEAD request: %w", err)
@@ -75,21 +68,20 @@ func (c *Client) ApacheChecker(ctx context.Context, datamobile config.DataMobile
 	if resp.StatusCode >= 200 && resp.StatusCode < 500 {
 		// Дополнительно можно проверить заголовок "Server"
 		serverHeader := resp.Header.Get("Server") // например, "Apache/2.4.41 (Ubuntu)"
-		fmt.Printf("- It just works! %s\n", c.baseURL+" - "+serverHeader)
+		fmt.Printf("- It just works! %s\n", c.cfg.ApacheAddress+" - "+serverHeader)
 
 		// Смотрим конфигурацию Apache (если это локальный компьютер)
-		if strings.Contains(datamobile.ApacheAddress, "127.0.0.1") || strings.Contains(datamobile.ApacheAddress, "localhost") { // "localhost""192.168.0.13" {
-			ShowApache1CModule(datamobile.ConfigPath)
+		if strings.Contains(c.cfg.ApacheAddress, "127.0.0.1") || strings.Contains(c.cfg.ApacheAddress, "localhost") { // "localhost""192.168.0.13" {
+			ShowApache1CModule(c.cfg.ApacheConfPath)
 		}
 		// Тестируем наш RESTful-сервис ("РЕСТный" сервис)
-		CheckDataMobileService(datamobile)
-		//return true, nil
+		c.CheckDataMobileService()
 	}
 
 	// return nil
 }
 
-// Функция чтения версии модуля 1С из Apache
+// Функция чтения версии модуля 1С из локального Apache
 func ShowApache1CModule(configPath string) {
 	// Простой вариант, без сравнения с expectedVersion
 	file, err := os.Open(configPath)
@@ -105,7 +97,7 @@ func ShowApache1CModule(configPath string) {
 	for scanner.Scan() {
 		line := scanner.Text()
 		if strings.Contains(line, "_1cws_module") && strings.Contains(line, "LoadModule") {
-			fmt.Printf("- Модуль 1С в конфигурации Apache:\n   %s", strings.TrimSpace(line))
+			fmt.Printf("- Модуль 1С в конфигурации Apache:%s\n", strings.TrimSpace(line))
 			found = true
 			break
 		}
@@ -118,90 +110,90 @@ func ShowApache1CModule(configPath string) {
 }
 
 // Функция проверки доступности и скорости RESTful-сервиса
-func CheckDataMobileService(datamobile config.DataMobileConfig) {
-	client := &http.Client{
-		Timeout: datamobile.RequestTimeout,
-	}
+func (c *Client) CheckDataMobileService() {
+	// client := &http.Client{
+	// 	Timeout: datamobile.RequestTimeout,
+	// }
 
-	targetURL := "http://" + datamobile.ApacheAddress + "/" + datamobile.PublicationName + "/hs/DataMobileExch/"
+	targetURL := c.cfg.ApacheAddress + "/" + c.cfg.PublicationName + "/hs/DataMobileExch/"
 
 	fmt.Printf("\n- GET to endpoint (DataMobile): %s\n", targetURL)
 
-	// Засекаем время до создания запроса, чтобы замер был точным
-	startTime := time.Now()
+	// // Засекаем время до создания запроса, чтобы замер был точным
+	// startTime := time.Now()
 
-	// 1. Создаем объект HTTP-запроса (метод GET)
-	req, err := http.NewRequest("GET", targetURL, nil)
-	if err != nil {
-		fmt.Printf("-- Не удалось создать HTTP-запрос. Детали: %v\n", err)
-		return
-	}
+	// // 1. Создаем объект HTTP-запроса (метод GET)
+	// req, err := http.NewRequest("GET", targetURL, nil)
+	// if err != nil {
+	// 	fmt.Printf("-- Не удалось создать HTTP-запрос. Детали: %v\n", err)
+	// 	return
+	// }
 
-	// 2. Добавляем Базовую Авторизацию (Basic Auth)
-	req.SetBasicAuth(datamobile.DbUser, datamobile.DbPass)
+	// // 2. Добавляем Базовую Авторизацию (Basic Auth)
+	// req.SetBasicAuth(c.cfg.DmUser, c.cfg.DmPass)
 
-	// 3. Выполняем запрос через клиент
-	resp, err := client.Do(req)
-	duration := time.Since(startTime)
+	// // 3. Выполняем запрос через клиент
+	// resp, err := client.Do(req)
+	// duration := time.Since(startTime)
 
-	// Проверка на полное падение сервера или таймаут
-	if err != nil {
-		fmt.Printf("-- Сервер не отвечает или упал!\n   Детали: %v\n", err)
-		return
-	}
-	defer resp.Body.Close()
+	// // Проверка на полное падение сервера или таймаут
+	// if err != nil {
+	// 	fmt.Printf("-- Сервер не отвечает или упал!\n   Детали: %v\n", err)
+	// 	return
+	// }
+	// defer resp.Body.Close()
 
-	// Проверяем HTTP статус-код (теперь должен быть 200)
-	if resp.StatusCode != http.StatusOK {
-		// Обыгрываем конфликт версий (HTTP 409)
-		if resp.StatusCode == http.StatusConflict {
-			bodyBytes, _ := io.ReadAll(resp.Body)
-			bodyStr := string(bodyBytes)
+	// // Проверяем HTTP статус-код (теперь должен быть 200)
+	// if resp.StatusCode != http.StatusOK {
+	// 	// Обыгрываем конфликт версий (HTTP 409)
+	// 	if resp.StatusCode == http.StatusConflict {
+	// 		bodyBytes, _ := io.ReadAll(resp.Body)
+	// 		bodyStr := string(bodyBytes)
 
-			fmt.Println("-- status", resp.StatusCode, "Конфликт версий 1С:")
+	// 		fmt.Println("-- status", resp.StatusCode, "Конфликт версий 1С:")
 
-			// Регулярное выражение для поиска версий в круглых скобках
-			re := regexp.MustCompile(`\((\d+\.\d+\.\d+\.\d+)\s*-\s*(\d+\.\d+\.\d+\.\d+)\)`)
-			matches := re.FindStringSubmatch(bodyStr)
+	// 		// Регулярное выражение для поиска версий в круглых скобках
+	// 		re := regexp.MustCompile(`\((\d+\.\d+\.\d+\.\d+)\s*-\s*(\d+\.\d+\.\d+\.\d+)\)`)
+	// 		matches := re.FindStringSubmatch(bodyStr)
 
-			if len(matches) == 3 {
-				fmt.Printf("--- Версия wsap24: %s\n", matches[1])
-				fmt.Printf("--- Кластер    1С: %s\n", matches[2])
-				fmt.Println("-- Перепубликуйте базу или обновите путь к wsap24-модулю в httpd.conf.")
-			} else {
-				// Если текст ошибки изменился, выводим как есть
-				fmt.Printf("   Технические детали:\n%s\n", bodyStr)
-			}
-			return
-		}
+	// 		if len(matches) == 3 {
+	// 			fmt.Printf("--- Версия wsap24: %s\n", matches[1])
+	// 			fmt.Printf("--- Кластер    1С: %s\n", matches[2])
+	// 			fmt.Println("-- Перепубликуйте базу или обновите путь к wsap24-модулю в httpd.conf.")
+	// 		} else {
+	// 			// Если текст ошибки изменился, выводим как есть
+	// 			fmt.Printf("   Технические детали:\n%s\n", bodyStr)
+	// 		}
+	// 		return
+	// 	}
 
-		// Другие ошибки (401, 404, 500 и т.д.)
-		fmt.Printf("-- service error: status %d\n", resp.StatusCode)
-		if resp.StatusCode == http.StatusNotFound {
-			fmt.Printf("--- База %s не опубликована на web-сервере %s\n", datamobile.PublicationName, datamobile.ApacheAddress)
-		}
-		if resp.StatusCode == http.StatusUnauthorized {
-			fmt.Println("--- Неверный логин или пароль пользователя 1С.")
-		}
-		return
-	}
+	// 	// Другие ошибки (401, 404, 500 и т.д.)
+	// 	fmt.Printf("-- service error: status %d\n", resp.StatusCode)
+	// 	if resp.StatusCode == http.StatusNotFound {
+	// 		fmt.Printf("--- База %s не опубликована на web-сервере %s\n", datamobile.PublicationName, datamobile.ApacheAddress)
+	// 	}
+	// 	if resp.StatusCode == http.StatusUnauthorized {
+	// 		fmt.Println("--- Неверный логин или пароль пользователя 1С.")
+	// 	}
+	// 	return
+	// }
 
-	// Проверяем скорость работы (тормоза)
-	fmt.Printf("-- Время ответа сервера: %v", duration)
-	if duration > datamobile.WarningDuration {
-		fmt.Printf(" Сервер сильно тормозит! Превышен лимит в %v\n", datamobile.WarningDuration)
-	} else {
-		fmt.Printf(" Скорость работы в норме\n")
-	}
+	// // Проверяем скорость работы (тормоза)
+	// fmt.Printf("-- Время ответа сервера: %v", duration)
+	// if duration > datamobile.WarningDuration {
+	// 	fmt.Printf(" Сервер сильно тормозит! Превышен лимит в %v\n", datamobile.WarningDuration)
+	// } else {
+	// 	fmt.Printf(" Скорость работы в норме\n")
+	// }
 
-	// Парсим JSON ответ от 1С
-	var result DataMobileResponse
-	err = json.NewDecoder(resp.Body).Decode(&result)
-	if err != nil {
-		fmt.Printf(" ОШИБКА JSON: Не удалось прочитать ответ от 1С. Детали: %v\n", err)
-		return
-	}
+	// // Парсим JSON ответ от 1С
+	// var result DataMobileResponse
+	// err = json.NewDecoder(resp.Body).Decode(&result)
+	// if err != nil {
+	// 	fmt.Printf(" ОШИБКА JSON: Не удалось прочитать ответ от 1С. Детали: %v\n", err)
+	// 	return
+	// }
 
-	// Выводим статус, который прислала сама 1С
-	fmt.Printf("-- data: %s\n", strings.TrimSpace(result.Data))
+	// // Выводим статус, который прислала сама 1С
+	// fmt.Printf("-- data: %s\n", strings.TrimSpace(result.Data))
 }
