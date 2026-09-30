@@ -23,43 +23,42 @@ func printGlobalUsage() {
 
 // Выносим в отдельный тип
 type DataMobileConfig struct {
-	PublicationName string `yaml:"publication_name"`
-	ApacheAddress   string `yaml:"apache_address"`
-	ApacheConfPath  string `yaml:"apache_conf_path"`
-	DmUser          string `yaml:"dm_user"`
-	DmPass          string `yaml:"dm_pass"`
+	PublicationName       string        `yaml:"apache_publication_name"`
+	ApacheAddress         string        `yaml:"apache_address"`
+	ApacheConfPath        string        `yaml:"apache_conf_path"`
+	ApacheWarningDuration time.Duration `yaml:"apache_warning_duration"`
+	DmUser                string        `yaml:"dm_user"`
+	DmPass                string        `yaml:"dm_pass"`
 }
 
-// type LMCZ struct{
-// 	BaseURL string `env:"LMCZ_BASE_URL" env-required:"true"`
-// }
+type LmczConfig struct {
+	// LmczURL  string `yaml:"lmcz_url"`
+	LmczHost           string        `yaml:"lmcz_host"`
+	LmczSubnet         string        `yaml:"lmcz_subnet"`
+	LmczPort           string        `yaml:"lmcz_port"`
+	LmczScannerTimeout time.Duration `yaml:"lmcz_scanner_timeout"`
+	LmczUser           string        `yaml:"lmcz_user"`
+	LmczPass           string        `yaml:"lmcz_pass"`
+	Token_X_API_KEY    string        `yaml:"token_x_api_key"`
+}
 
 type Config struct {
-	Env              string           `yaml:"env"`
-	RequestTimeout   time.Duration    `yaml:"request_timeout"`
-	WarningDuration  time.Duration    `yaml:"warning_duration"`
-	LaunchDataMobile bool             `yaml:"launch_datamobile"`
-	LaunchLMCZ       bool             `yaml:"launch_lmcz"`
-	DataMobile       DataMobileConfig `yaml:"datamobile"`
-	LMCZ             struct {
-		BaseURL string `yaml:"base_url"`
-	} `yaml:"lmcz"`
-	// // Прежняя (только для ЛМ ЧЗ) Config.
-	// // Видимо добавить в структуру LMCZ, но сделать ее как DataMobile
-	// // LMCZ LMCZ
-	// Command        string // "get" или "post"
-	// ScannerTimeout time.Duration
-	// Host           string
-	// Port           string
-	// Subnet         string // get
-	// Username       string // post
-	// Password       string // post
-	// Token          string // post
+	Env                  string           `yaml:"env"`
+	ClientRequestTimeout time.Duration    `yaml:"client_request_timeout"`
+	LaunchDataMobile     bool             `yaml:"launch_datamobile"`
+	LaunchLMCZ           bool             `yaml:"launch_lmcz"`
+	DataMobile           DataMobileConfig `yaml:"datamobile"`
+	LMCZ                 LmczConfig       `yaml:"lmcz"`
 }
 
-// New парсит флаги и возвращает готовую конфигурацию.
-// Если в будущем будет нужно читать переменные окружения или .env файл,
-// поменяется код только внутри этой функции.
+// switch cfg.Command {
+// case "get":
+// 	getCmd := flag.NewFlagSet("get", flag.ExitOnError)
+// case "post":
+// 	postCmd := flag.NewFlagSet("post", flag.ExitOnError)
+
+// New() парсит флаги и возвращает готовую конфигурацию.
+// Когда будем читать переменные окружения или .env файл, код поменяется только тут.
 func New() (*Config, error) {
 	// Вариант 03.
 	// 1. Инициализируем пустую структуру

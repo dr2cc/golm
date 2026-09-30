@@ -1,4 +1,4 @@
-package client
+package lmcz
 
 import (
 	"bytes"
@@ -21,26 +21,6 @@ type ResponsePayload struct {
 	Message string `json:"message"`
 }
 
-// type Client struct {
-// 	httpClient *http.Client
-// 	baseURL    string
-// 	username   string
-// 	password   string
-// }
-
-// // New создает и возвращает настроенный экземпляр Client.
-// // Мы явно передаем таймаут, избегая глобальных дефолтов.
-// func New(baseURL, username, password string, timeout time.Duration) *Client {
-// 	return &Client{
-// 		httpClient: &http.Client{
-// 			Timeout: timeout,
-// 		},
-// 		baseURL:  baseURL,
-// 		username: username,
-// 		password: password,
-// 	}
-// }
-
 // SendToken отправляет POST-запрос с JSON-телом и Basic Auth.
 // Метод принимает context.Context, что позволяет отменять запрос извне (например, при выходе из CLI).
 func (c *Client) SendToken(ctx context.Context, token string) (*ResponsePayload, error) {
@@ -53,7 +33,7 @@ func (c *Client) SendToken(ctx context.Context, token string) (*ResponsePayload,
 		return nil, fmt.Errorf("failed to marshal payload to JSON: %w", err)
 	}
 
-	url := "http://" + c.baseURL + "/api/v2/init"
+	url := "http://" + c.cfg.LmczHost + ":" + c.cfg.LmczPort + "/api/v2/init"
 
 	// 3. Создаем запрос с поддержкой контекста (для избежания зависания запросов)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(jsonBytes))
@@ -66,7 +46,7 @@ func (c *Client) SendToken(ctx context.Context, token string) (*ResponsePayload,
 	req.Header.Set("Accept", "application/json")
 
 	// 5. Добавляем Basic Authentication
-	req.SetBasicAuth(c.username, c.password)
+	req.SetBasicAuth(c.cfg.LmczUser, c.cfg.LmczPass)
 
 	// 6. Выполняем сетевой запрос через переиспользуемый httpClient
 	resp, err := c.httpClient.Do(req)

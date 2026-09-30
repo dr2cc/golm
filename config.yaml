@@ -3,17 +3,24 @@ env: "development"
 # Флаги запуска модулей по умолчанию (флаги CLI могут их переопределить)
 launch_datamobile: false
 launch_lmcz: false
-request_timeout: "10s"   # Будет автоматически распарсено в time.Duration
-warning_duration: "2s"
+client_request_timeout: "10s"   # Будет автоматически распарсено в time.Duration
 
 datamobile:
-  publication_name: "polyMark"
+  apache_publication_name: "polyMark"
   apache_address: "localhost"
   # 192.168.0.75 / localhost
   apache_conf_path: C:/Apache24/conf/httpd.conf
   # ssh drk@192.168.0.75 cd /etc/apache2/ apache2.conf // Путь к конфигурационному файлу Apache (для Windows или Linux)
+  apache_warning_duration: "2s"
   dm_user: "admin"
   dm_pass: ""
 
 lmcz:
-  base_url: "http://localhost:5000"
+  # lmcz_url: "http://sidingkas:5995/api/v2/status"
+  lmcz_host: "localhost"
+  lmcz_subnet: "192.168.0"
+  lmcz_port: "5995"
+  lmcz_scanner_timeout: "500ms"
+  lmcz_user: "admin"
+  lmcz_pass: "admin"
+  token_x_api_key: ""

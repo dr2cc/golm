@@ -1,33 +1,28 @@
-package client
+package lmcz
 
 import (
 	"net/http"
 	"strings"
+
+	"github.com/dr2cc/golm/internal/config"
 )
 
 // Client инкапсулирует настройки для работы с удаленным сервером.
 // Хранение http.Client внутри структуры — это Go-идиома, позволяющая переиспользовать соединения.
 type Client struct {
+	cfg        config.LmczConfig
 	httpClient *http.Client
-	baseURL    string
-	username   string
-	password   string
 }
 
 // New создает и возвращает настроенный экземпляр Client.
 // Мы явно передаем таймаут, избегая глобальных дефолтов.
-// func New(baseURL, username, password string, timeout time.Duration) *Client {
-func New(baseURL, username, password string) *Client {
+func NewClient(lmcz config.LmczConfig, httpClient *http.Client) *Client {
 	// Добавляем схему при инициализации, если забыли указать
-	if !strings.HasPrefix(baseURL, "http://") && !strings.HasPrefix(baseURL, "https://") {
-		baseURL = "http://" + baseURL
+	if !strings.HasPrefix(lmcz.LmczHost, "http://") && !strings.HasPrefix(lmcz.LmczHost, "https://") {
+		lmcz.LmczHost = "http://" + lmcz.LmczHost
 	}
 	return &Client{
-		httpClient: &http.Client{
-			// Timeout: timeout,
-		},
-		baseURL:  baseURL,
-		username: username,
-		password: password,
+		cfg:        lmcz,
+		httpClient: httpClient,
 	}
 }
