@@ -22,8 +22,8 @@ type Client struct {
 
 func NewClient(datamobile config.DataMobileConfig, httpClient *http.Client) *Client {
 	// Добавляем схему при инициализации, если забыли указать
-	if !strings.HasPrefix(datamobile.ApacheAddress, "http://") && !strings.HasPrefix(datamobile.ApacheAddress, "https://") {
-		datamobile.ApacheAddress = "http://" + datamobile.ApacheAddress
+	if !strings.HasPrefix(datamobile.Address, "http://") && !strings.HasPrefix(datamobile.Address, "https://") {
+		datamobile.Address = "http://" + datamobile.Address
 	}
 	return &Client{
 		cfg:        datamobile,
@@ -31,9 +31,9 @@ func NewClient(datamobile config.DataMobileConfig, httpClient *http.Client) *Cli
 	}
 }
 
-func (c *Client) ApacheChecker(ctx context.Context) error {
+func (c *Client) Check(ctx context.Context) error {
 	// Использование HEAD-запроса экономит трафик
-	req, err := http.NewRequestWithContext(ctx, "HEAD", c.cfg.ApacheAddress, nil)
+	req, err := http.NewRequestWithContext(ctx, "HEAD", c.cfg.Address, nil)
 	if err != nil {
 		return fmt.Errorf("failed HEAD request: %w", err)
 	}
@@ -49,11 +49,11 @@ func (c *Client) ApacheChecker(ctx context.Context) error {
 	if resp.StatusCode >= 200 && resp.StatusCode < 500 {
 		// Дополнительно можно проверить заголовок "Server"
 		serverHeader := resp.Header.Get("Server") // например, "Apache/2.4.41 (Ubuntu)"
-		fmt.Printf("- It just works! %s\n", c.cfg.ApacheAddress+" - "+serverHeader)
+		fmt.Printf("- It just works! %s\n", c.cfg.Address+" - "+serverHeader)
 
 		// Смотрим конфигурацию Apache (если это локальный компьютер)
-		if strings.Contains(c.cfg.ApacheAddress, "127.0.0.1") || strings.Contains(c.cfg.ApacheAddress, "localhost") { // "localhost""192.168.0.13" {
-			if err := ShowApache1CModule(c.cfg.ApacheConfPath); err != nil {
+		if strings.Contains(c.cfg.Address, "127.0.0.1") || strings.Contains(c.cfg.Address, "localhost") { // "localhost""192.168.0.13" {
+			if err := ShowApache1CModule(c.cfg.ConfPath); err != nil {
 				return err
 			}
 		}
@@ -99,7 +99,7 @@ func ShowApache1CModule(configPath string) error {
 
 // Функция проверки доступности и скорости RESTful-сервиса
 func (c *Client) CheckDataMobileService() error {
-	targetURL := c.cfg.ApacheAddress + "/" + c.cfg.PublicationName + "/hs/DataMobileExch/"
+	targetURL := c.cfg.Address + "/" + c.cfg.PublicationName + "/hs/DataMobileExch/"
 	fmt.Printf("\n- GET to endpoint (DataMobile): %s\n", targetURL)
 
 	// Время до создания запроса (чтобы замер отклика был точным)
@@ -149,7 +149,7 @@ func (c *Client) CheckDataMobileService() error {
 		// Другие ошибки (401, 404, 500 и т.д.)
 		fmt.Printf("-- service error: status %d\n", resp.StatusCode)
 		if resp.StatusCode == http.StatusNotFound {
-			fmt.Printf("--- База %s не опубликована на web-сервере %s\n", c.cfg.PublicationName, c.cfg.ApacheAddress)
+			fmt.Printf("--- База %s не опубликована на web-сервере %s\n", c.cfg.PublicationName, c.cfg.Address)
 		}
 		if resp.StatusCode == http.StatusUnauthorized {
 			fmt.Println("--- Неверный логин или пароль пользователя 1С.")
@@ -158,8 +158,8 @@ func (c *Client) CheckDataMobileService() error {
 
 	// Проверяем скорость работы (тормоза)
 	fmt.Printf("-- Время ответа сервера: %v", duration)
-	if duration > c.cfg.ApacheWarningDuration {
-		fmt.Printf(" Сервер сильно тормозит! Превышен лимит в %v\n", c.cfg.ApacheWarningDuration)
+	if duration > c.cfg.WarningDuration {
+		fmt.Printf(" Сервер сильно тормозит! Превышен лимит в %v\n", c.cfg.WarningDuration)
 	} else {
 		fmt.Printf(" Скорость работы в норме\n")
 	}

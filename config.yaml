@@ -2,7 +2,8 @@ env: "development"
 
 # Флаги запуска модулей по умолчанию (флаги CLI могут их переопределить)
 launch_datamobile: false
-launch_lmcz: false
+launch_lmcz_check: false
+launch_lmcz_init: false
 client_request_timeout: "10s"   # Будет автоматически распарсено в time.Duration
 
 datamobile:
@@ -16,11 +17,13 @@ datamobile:
   dm_pass: ""
 
 lmcz:
-  # lmcz_url: "http://sidingkas:5995/api/v2/status"
+  # Схемы не нужны!
   lmcz_host: "localhost"
+  # "localhost" "sidingkas"
   lmcz_subnet: "192.168.0"
-  lmcz_port: "5995"
+  lmcz_port: "5997"
   lmcz_scanner_timeout: "500ms"
   lmcz_user: "admin"
   lmcz_pass: "admin"
   token_x_api_key: ""
+  # ce6df78c-a28c-4f6f-b636-8cc28b46315f "Профиль"
