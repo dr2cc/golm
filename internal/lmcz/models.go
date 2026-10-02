@@ -1,8 +1,14 @@
 package lmcz
 
-// Структура для парсинга ответа сервера (например: {"status": "not_configured"})
+// Эндпойнт возвращает только статус (например: {"status": "not_configured"})
 type StatusResponse struct {
 	Status string `json:"status"`
+}
+
+// Эндпойнт инициализирует систему и возвращает, например, ID сессии
+type InitResponse struct {
+	ErrorCode string `json:"errorCode"`
+	Reason    string `json:"reason"`
 }
 
 // RequestPayload описывает структуру тела POST-запроса.

@@ -153,6 +153,17 @@ func (c *Client) Init(ctx context.Context) error {
 	// вспомогательную функцию для получения правильного hostPort, чтобы не сканировать сеть дважды.
 	hostPort := c.getTargetHostPort()
 	if err := c.sendToken(ctx, hostPort); err != nil {
+		// ❗НЕ ХОЧУ ТАК! Хочу красивый статус, как в shortenJSON (drk-url-shortener)
+		// // Примерно так- форматирование ответа
+		// response := ShortenResponse{
+		// 	Result: r.shortener.FormatShortURL(r.baseURL, alias),
+		// }
+		// // Здесь отправляем ответ клиенту.
+		// httputil.JSON(w, req, http.StatusCreated, response)
+		// // А мне тут надо в терминал или логгер!!
+		// 	InitResponse я уже сделал!
+		// var initResp InitResponse
+
 		return fmt.Errorf("ошибка инициализации сервера: %w", err)
 	}
 
