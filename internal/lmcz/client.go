@@ -32,7 +32,7 @@ func NewClient(lmcz config.LmczConfig, httpClient *http.Client) *Client {
 	}
 }
 
-func (c *Client) Check(ctx context.Context) (string, error) {
+func (c *Client) Check(ctx context.Context) (CheckResult, error) {
 	var hostPort string
 
 	if c.cfg.Host == "" {
@@ -46,7 +46,7 @@ func (c *Client) Check(ctx context.Context) (string, error) {
 	}
 
 	if hostPort == "" {
-		return "", fmt.Errorf("хостов с открытым портом %s не найдено", c.cfg.Port)
+		return CheckResult{}, fmt.Errorf("хостов с открытым портом %s не найдено", c.cfg.Port)
 	}
 
 	// Добавляем схему
@@ -56,39 +56,39 @@ func (c *Client) Check(ctx context.Context) (string, error) {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, finalURL, nil)
 	if err != nil {
-		return "", fmt.Errorf("creating request: %w", err)
+		return CheckResult{}, fmt.Errorf("creating request: %w", err)
 	}
 
 	// Формат ответа в рамках HTTP это *Response
-	resp, err := c.httpClient.Do(req)
+	httpResponse, err := c.httpClient.Do(req)
 	if err != nil {
-		// Распаковываем ошибку http-клиента, чтобы убрать дублирование URL
+		// Распаковываем ошибку http-клиента
 		var urlErr *url.Error
 		if errors.As(err, &urlErr) {
-			return "", fmt.Errorf("сервер LMCZ недоступен по адресу %s: %w", hostPort, urlErr.Err)
+			return CheckResult{}, fmt.Errorf("сервер LMCZ недоступен по адресу %s: %w", hostPort, urlErr.Err)
 		}
-		return "", fmt.Errorf("запрос к LMCZ завершился ошибкой: %w", err)
+		return CheckResult{}, fmt.Errorf("запрос к LMCZ завершился ошибкой: %w", err)
 	}
 	// ЗОЛОТОЕ ПРАВИЛО Go для HTTP-запросов:
 	// МОЖНО обращаться к resp.Body (ниже) ТОЛЬКО в том случае, если err == nil.
 
 	// КАЖДЫЙ РАЗ, когда успешно получен http.Response (err == nil и resp != nil),
 	// нужно вызвать resp.Body.Close() (регистрируем закрытие тела)
-	defer resp.Body.Close()
+	defer httpResponse.Body.Close()
 
 	// Проверяем статус-код ответа (Чистый код: сервер ответил, но статус плохой)
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("сервер LMCZ вернул статус: %s", resp.Status)
+	if httpResponse.StatusCode != http.StatusOK {
+		return CheckResult{Status: "", HttpCode: httpResponse.StatusCode}, fmt.Errorf("сервер LMCZ вернул статус: %s", httpResponse.Status)
 	}
 
 	// 📌 Считываем содержимое тела. Три популярных метода:
 
 	// 1. Получаем всё как строку или байты (маленькие ответы, JSON, HTML)
-	b, err := io.ReadAll(resp.Body)
+	b, err := io.ReadAll(httpResponse.Body)
 	// Так как "свиток" (scroll) resp.Body это однонаправленный поток (stream), не возможно «перемотать» его назад.
 	// Как только данные будут прочитаны (например, с помощью io.ReadAll(resp.Body)), повторное чтение вернет io.EOF (конец файла).
 	if err != nil {
-		return "", fmt.Errorf("failed to read Response.Body: %w", err)
+		return CheckResult{Status: "", HttpCode: httpResponse.StatusCode}, fmt.Errorf("failed to read Response.Body: %w", err)
 	}
 	// // 2. Парсим JSON (самый эффективный способ)
 	// var user UserStruct
@@ -116,15 +116,15 @@ func (c *Client) Check(ctx context.Context) (string, error) {
 	// fmt.Printf и fmt.Println по умолчанию пишут именно сюда. Вы видите этот текст прямо в терминале.
 	// - Стандартный вывод ошибок (stderr) — специальный отдельный поток для ошибок. Туда пишет, например, log.Println.
 
-	// Парсим статус из ответа
-	var statusResp StatusResponse
-	if err := json.Unmarshal(b, &statusResp); err != nil {
+	// Парсим поле status из ответа
+	var check StatusEndpointResponse
+	if err := json.Unmarshal(b, &check); err != nil {
 		// Если сервер вернул не JSON, но ответил 200 OK,
-		// возвращаем сырой текст как статус (на всякий случай)
-		return string(b), nil
+		// возвращаем сырой текст (на всякий случай)
+		return CheckResult{string(b), httpResponse.StatusCode}, nil
 	}
 
-	return statusResp.Status, nil
+	return CheckResult{check.Status, httpResponse.StatusCode}, nil
 }
 
 // Init — публичный метод. Он оркеструет процесс: проверяет статус
@@ -133,65 +133,54 @@ func (c *Client) Init(ctx context.Context) error {
 	// 1. Делаем предварительную проверку статуса.
 	// Метод Check сам разберется: сканировать сеть или брать жесткий Host,
 	// очистит префиксы, сделает GET-запрос и вернет строковый статус.
-	status, err := c.Check(ctx)
+	checkResult, err := c.Check(ctx)
 	if err != nil {
 		return fmt.Errorf("предварительная проверка статуса перед инициализацией провалена: %w", err)
 	}
 
-	fmt.Printf("Текущий статус сервера LMCZ: %s\n", status)
+	fmt.Printf("LMCZ server response: (%d) status: %s\n", checkResult.HttpCode, checkResult.Status)
 
 	// 2. Бизнес-логика: отправляем токен только если сервер не настроен
-	if status != "not_configured" {
+	if checkResult.Status != "not_configured" {
 		fmt.Println("Сервер LMCZ уже настроен. Отправка токена инициализации не требуется.")
 		return nil
 	}
 
-	fmt.Println("Сервер не настроен. Запуск отправки токена...")
+	fmt.Println("Сервер не настроен. Отправка токена...")
 
 	// 3. Вызываем приватный метод для отправки токена.
 	// Так как в Check мы уже гарантированно проверили адрес, мы можем вызвать
 	// вспомогательную функцию для получения правильного hostPort, чтобы не сканировать сеть дважды.
 	hostPort := c.getTargetHostPort()
 	if err := c.sendToken(ctx, hostPort); err != nil {
-		// ❗НЕ ХОЧУ ТАК! Хочу красивый статус, как в shortenJSON (drk-url-shortener)
-		// // Примерно так- форматирование ответа
-		// response := ShortenResponse{
-		// 	Result: r.shortener.FormatShortURL(r.baseURL, alias),
-		// }
-		// // Здесь отправляем ответ клиенту.
-		// httputil.JSON(w, req, http.StatusCreated, response)
-		// // А мне тут надо в терминал или логгер!!
-		// 	InitResponse я уже сделал!
-		// var initResp InitResponse
-
-		return fmt.Errorf("ошибка инициализации сервера: %w", err)
+		return err
 	}
 
 	return nil
 }
 
-// sendToken — приватный метод (с маленькой буквы). Отвечает строго за техническую
-// отправку POST-запроса на конкретный хост. Извне пакета его вызвать нельзя.
+// sendToken — приватный метод. Отвечает строго за техническую
+// отправку POST-запроса на конкретный хост.
 func (c *Client) sendToken(ctx context.Context, hostPort string) error {
-	payload := RequestPayload{Token: c.cfg.TokenXAPIKEY}
+	payload := InitRequestPayload{Token: c.cfg.TokenXAPIKEY}
 
 	jsonBytes, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal payload to JSON: %w", err)
 	}
 
-	// Переименовали переменную в targetURL, чтобы избежать затенения пакета "net/url"
 	targetURL := fmt.Sprintf("http://%s/api/v2/init", hostPort)
 
+	// Формируем запрос:
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewBuffer(jsonBytes))
 	if err != nil {
 		return fmt.Errorf("failed to create HTTP request: %w", err)
 	}
-
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.SetBasicAuth(c.cfg.User, c.cfg.Pass)
 
+	// Обрабатывем ответ:
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		// Распаковываем ошибку http-клиента, теперь это работает без ошибок компилятора
@@ -205,19 +194,22 @@ func (c *Client) sendToken(ctx context.Context, hostPort string) error {
 
 	// Проверяем HTTP статус-код (все что вне диапазона 2xx — ошибка)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		var errResult ResponsePayload
+		var apiErr InitErrorPayload
 
 		// Пытаемся прочитать JSON-ответ от сервера, чтобы узнать точную причину ошибки
-		if err := json.NewDecoder(resp.Body).Decode(&errResult); err == nil && errResult.Message != "" {
-			return fmt.Errorf("сервер вернул ошибку (%s): %s", resp.Status, errResult.Message)
+		if err := json.NewDecoder(resp.Body).Decode(&apiErr); err == nil && apiErr.Reason != "" {
+			// Оборачиваем apiErr. Названия полей (errorCode, reason)
+			// подставятся автоматически благодаря методу Error() у InitErrorPayload
+			return fmt.Errorf("(%d) %w", resp.StatusCode, apiErr)
 		}
 
-		// Если сервер прислал не JSON (например, ошибку nginx), отдаем стандартный статус
-		return fmt.Errorf("unexpected status code: %d (%s)", resp.StatusCode, resp.Status)
+		return fmt.Errorf("unexpected status code: (%d) %w", resp.StatusCode, apiErr)
+		// // Если сервер прислал не JSON (например, ошибку nginx), отдаем стандартный статус
+		// return fmt.Errorf("unexpected status codee: %d (%s)", resp.StatusCode, resp.Status)
 	}
 
 	// Если статус 2xx — успешно декодируем финальный ответ
-	var result ResponsePayload
+	var result InitResponsePayload
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return fmt.Errorf("failed to decode JSON response: %w", err)
 	}

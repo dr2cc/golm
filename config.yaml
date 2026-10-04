@@ -21,7 +21,7 @@ lmcz:
   lmcz_host: "localhost"
   # "localhost" "sidingkas"
   lmcz_subnet: "192.168.0"
-  lmcz_port: "5997"
+  lmcz_port: "5998"
   lmcz_scanner_timeout: "500ms"
   lmcz_user: "admin"
   lmcz_pass: "admin"

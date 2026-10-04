@@ -35,11 +35,11 @@ func Run(cfg config.Config) error {
 	if cfg.LaunchLmczCheck {
 		log.Println("Запуск проверки ЛМ ЧЗ...")
 		czClient := lmcz.NewClient(cfg.LMCZ, httpClient)
-		status, err := czClient.Check(ctx)
+		checkResult, err := czClient.Check(ctx)
 		if err != nil {
 			return err
 		}
-		fmt.Printf("Проверка завершена успешно. status: %s\n", status)
+		fmt.Printf("Проверка завершена успешно, (%d) status: %s\n", checkResult.HttpCode, checkResult.Status)
 		return nil
 	}
 
