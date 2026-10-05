@@ -24,18 +24,25 @@ func Run(cfg config.Config) error {
 
 	// 2. Initialize domain clients
 
+	// Логика dm
 	if cfg.LaunchDataMobile {
 		log.Println("Запуск проверки DataMobile-Apache-1C...")
-		dmClient := datamobile.NewClient(cfg.DataMobile, httpClient)
+		// Собираем конфиг специально под нужды клиента
+		clientCfg := datamobile.ClientConfig{
+			Apache:     cfg.Apache,
+			DataMobile: cfg.DataMobile,
+		}
+		dmClient := datamobile.NewClient(clientCfg, httpClient)
 
 		return dmClient.Check(ctx)
 	}
 
-	// Логика golm
-	if cfg.LaunchLmczCheck {
+	// Логика lm
+	// Эндпойнт /status
+	if cfg.LaunchLmczStatus {
 		log.Println("Запуск проверки ЛМ ЧЗ...")
 		czClient := lmcz.NewClient(cfg.LMCZ, httpClient)
-		checkResult, err := czClient.Check(ctx)
+		checkResult, err := czClient.Status(ctx)
 		if err != nil {
 			return err
 		}
@@ -43,20 +50,11 @@ func Run(cfg config.Config) error {
 		return nil
 	}
 
+	// Эндпойнт /init
 	if cfg.LaunchLmczInit {
 		log.Printf("Отправляем токен для инициализации %s...\n", cfg.LMCZ.Host)
 		// log.Println("Инициализация ЛМ ЧЗ...")
 		czClient := lmcz.NewClient(cfg.LMCZ, httpClient)
-
-		// ❗ Проверка, что ЛМ ЧЗ уже инициализирован!
-		// "status": "not_configured"
-		// Сделано?!
-		// Теперь честный ответ, выводить в лог.
-		// Если пустой токен:
-		// {"errorCode":6020,"reason":"invalid value of parameter: token"}
-
-		// // Заглушка
-		// _ = czClient
 
 		return czClient.Init(ctx)
 	}

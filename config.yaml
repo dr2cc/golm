@@ -7,23 +7,26 @@ launch_lmcz_init: false
 client_request_timeout: "10s"   # Будет автоматически распарсено в time.Duration
 
 datamobile:
-  apache_publication_name: "polyMark"
-  apache_address: "localhost"
+  user: "admin"
+  pass: ""
+
+apache:
+  publication_name: "tradeProfilDm"
+  # tradeProfilDm / polyMark
+  address: "192.168.0.75"
   # 192.168.0.75 / localhost
-  apache_conf_path: C:/Apache24/conf/httpd.conf
+  conf_path: C:/Apache24/conf/httpd.conf
   # ssh drk@192.168.0.75 cd /etc/apache2/ apache2.conf // Путь к конфигурационному файлу Apache (для Windows или Linux)
-  apache_warning_duration: "2s"
-  dm_user: "admin"
-  dm_pass: ""
+  warning_duration: "2s"
 
 lmcz:
   # Схемы не нужны!
-  lmcz_host: "localhost"
+  host: "localhost"
   # "localhost" "sidingkas"
-  lmcz_subnet: "192.168.0"
-  lmcz_port: "5998"
-  lmcz_scanner_timeout: "500ms"
-  lmcz_user: "admin"
-  lmcz_pass: "admin"
-  token_x_api_key: ""
+  subnet: "192.168.0"
+  port: "5998"
+  scanner_timeout: "500ms"
+  user: "admin"
+  pass: "admin"
+  token_x_api_key: "ce6df78c-a28c-4f6f-b636-8cc28b46315f"
   # ce6df78c-a28c-4f6f-b636-8cc28b46315f "Профиль"

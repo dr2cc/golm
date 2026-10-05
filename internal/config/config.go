@@ -21,24 +21,25 @@ func printGlobalUsage() {
 	fmt.Fprintf(os.Stderr, "Используйте \"%s <команда> -h\" для просмотра флагов конкретной команды.\n", exeName)
 }
 
-// Выносим в отдельный тип
+type ApacheConfig struct {
+	PublicationName string        `yaml:"publication_name"`
+	Address         string        `yaml:"address"`
+	ConfPath        string        `yaml:"conf_path"`
+	WarningDuration time.Duration `yaml:"warning_duration"`
+}
+
 type DataMobileConfig struct {
-	PublicationName string        `yaml:"apache_publication_name"`
-	Address         string        `yaml:"apache_address"`
-	ConfPath        string        `yaml:"apache_conf_path"`
-	WarningDuration time.Duration `yaml:"apache_warning_duration"`
-	DmUser          string        `yaml:"dm_user"`
-	DmPass          string        `yaml:"dm_pass"`
+	User string `yaml:"user"`
+	Pass string `yaml:"pass"`
 }
 
 type LmczConfig struct {
-	// LmczURL  string `yaml:"lmcz_url"`
-	Host           string        `yaml:"lmcz_host"`
-	Subnet         string        `yaml:"lmcz_subnet"`
-	Port           string        `yaml:"lmcz_port"`
-	ScannerTimeout time.Duration `yaml:"lmcz_scanner_timeout"`
-	User           string        `yaml:"lmcz_user"`
-	Pass           string        `yaml:"lmcz_pass"`
+	Host           string        `yaml:"host"`
+	Subnet         string        `yaml:"subnet"`
+	Port           string        `yaml:"port"`
+	ScannerTimeout time.Duration `yaml:"scanner_timeout"`
+	User           string        `yaml:"user"`
+	Pass           string        `yaml:"pass"`
 	TokenXAPIKEY   string        `yaml:"token_x_api_key"`
 }
 
@@ -46,8 +47,9 @@ type Config struct {
 	Env                  string           `yaml:"env"`
 	ClientRequestTimeout time.Duration    `yaml:"client_request_timeout"`
 	LaunchDataMobile     bool             `yaml:"launch_datamobile"`
-	LaunchLmczCheck      bool             `yaml:"launch_lmcz_check"`
+	LaunchLmczStatus     bool             `yaml:"launch_lmcz_check"`
 	LaunchLmczInit       bool             `yaml:"launch_lmcz_init"`
+	Apache               ApacheConfig     `yaml:"apache"`
 	DataMobile           DataMobileConfig `yaml:"datamobile"`
 	LMCZ                 LmczConfig       `yaml:"lmcz"`
 }
@@ -81,7 +83,7 @@ func New() (*Config, error) {
 	// 4. Привязываем флаги командной строки к полям созданного объекта.
 	// В качестве дефолтных значений передаем то, что прочитано из файла YAML.
 	flag.BoolVar(&cfg.LaunchDataMobile, "dm", cfg.LaunchDataMobile, "Запустить проверку DataMobile-Apache-1C")
-	flag.BoolVar(&cfg.LaunchLmczCheck, "lm", cfg.LaunchLmczCheck, "Запустить тест ЛМ ЧЗ")
+	flag.BoolVar(&cfg.LaunchLmczStatus, "lm", cfg.LaunchLmczStatus, "Запустить тест ЛМ ЧЗ")
 	flag.BoolVar(&cfg.LaunchLmczInit, "token", cfg.LaunchLmczInit, "Инициализировать ЛМ ЧЗ")
 
 	// 5. Парсим флаги.
@@ -186,7 +188,7 @@ func (c *Config) validateEnvironment() {
 	}
 
 	// Если мы в WSL и адрес локальный — выводим предупреждение
-	if strings.Contains(c.DataMobile.Address, "127.0.0.1") || strings.Contains(c.DataMobile.Address, "localhost") {
+	if strings.Contains(c.Apache.Address, "127.0.0.1") || strings.Contains(c.Apache.Address, "localhost") {
 		fmt.Println("[CONFIG WARNING]: Вы запускаете код внутри WSL2 и запрашиваете localhost (127.0.0.1).")
 		fmt.Println("Если сетевой режим WSL не изменен на 'mirrored', запрос завершится ошибкой 'connection refused'.")
 	}

@@ -4,44 +4,76 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"regexp"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/dr2cc/golm/internal/config"
 )
 
+// ClientConfig содержит строго то, что нужно для HTTP-запросов
+type ClientConfig struct {
+	Apache     config.ApacheConfig
+	DataMobile config.DataMobileConfig
+}
+
 type Client struct {
-	cfg        config.DataMobileConfig
+	cfg        ClientConfig
 	httpClient *http.Client
 }
 
-func NewClient(datamobile config.DataMobileConfig, httpClient *http.Client) *Client {
+func NewClient(cfg ClientConfig, httpClient *http.Client) *Client {
 	// Добавляем схему при инициализации, если забыли указать
-	if !strings.HasPrefix(datamobile.Address, "http://") && !strings.HasPrefix(datamobile.Address, "https://") {
-		datamobile.Address = "http://" + datamobile.Address
+	if !strings.HasPrefix(cfg.Apache.Address, "http://") && !strings.HasPrefix(cfg.Apache.Address, "https://") {
+		cfg.Apache.Address = "http://" + cfg.Apache.Address
 	}
 	return &Client{
-		cfg:        datamobile,
+		cfg:        cfg,
 		httpClient: httpClient,
 	}
 }
 
 func (c *Client) Check(ctx context.Context) error {
 	// Использование HEAD-запроса экономит трафик
-	req, err := http.NewRequestWithContext(ctx, "HEAD", c.cfg.Address, nil)
+	req, err := http.NewRequestWithContext(ctx, "HEAD", c.cfg.Apache.Address, nil)
 	if err != nil {
-		return fmt.Errorf("failed HEAD request: %w", err)
+		return fmt.Errorf("failed create HEAD request: %w", err)
 	}
 
 	// Формат ответа в рамках HTTP это *Response
 	resp, err := c.httpClient.Do(req) //http.Get("http://" + hostPort)
 	if err != nil {
-		return fmt.Errorf("network request failed: %w", err)
+		// return fmt.Errorf("network request failed: %w", err)
+		// ТУТ
+		var opErr *net.OpError
+		if errors.As(err, &opErr) {
+			// 1. Ошибка DNS (неверное имя хоста)
+			var dnsErr *net.DNSError
+			if errors.As(opErr.Err, &dnsErr) {
+				return fmt.Errorf("сервер недоступен: хост %q не найден", dnsErr.Name)
+			}
+
+			// 2. Сервер не запущен (Connection Refused)
+			// Проверяем как универсальный ECONNREFUSED, так и числовой код Windows 10061 (WSAECONNREFUSED)
+			if errors.Is(opErr.Err, syscall.ECONNREFUSED) || isWindowsConnRefused(opErr.Err) {
+				return fmt.Errorf("сервер не запущен по адресу %s (подключение отклонено)", c.cfg.Apache.Address)
+			}
+		}
+
+		// 3. Обработка таймаута контекста
+		if errors.Is(err, context.DeadlineExceeded) {
+			return fmt.Errorf("время ожидания ответа от сервера %s истекло", c.cfg.Apache.Address)
+		}
+
+		// 4. Все остальные сетевые ошибки (общий случай)
+		return fmt.Errorf("сетевой запрос к %s завершился ошибкой: %w", c.cfg.Apache.Address, err)
 	}
 	defer resp.Body.Close()
 
@@ -49,11 +81,11 @@ func (c *Client) Check(ctx context.Context) error {
 	if resp.StatusCode >= 200 && resp.StatusCode < 500 {
 		// Дополнительно можно проверить заголовок "Server"
 		serverHeader := resp.Header.Get("Server") // например, "Apache/2.4.41 (Ubuntu)"
-		fmt.Printf("- It just works! %s\n", c.cfg.Address+" - "+serverHeader)
+		fmt.Printf("- It just works! %s\n", c.cfg.Apache.Address+" - "+serverHeader)
 
 		// Смотрим конфигурацию Apache (если это локальный компьютер)
-		if strings.Contains(c.cfg.Address, "127.0.0.1") || strings.Contains(c.cfg.Address, "localhost") { // "localhost""192.168.0.13" {
-			if err := ShowApache1CModule(c.cfg.ConfPath); err != nil {
+		if strings.Contains(c.cfg.Apache.Address, "127.0.0.1") || strings.Contains(c.cfg.Apache.Address, "localhost") { // "localhost""192.168.0.13" {
+			if err := ShowApache1CModule(c.cfg.Apache.ConfPath); err != nil {
 				return err
 			}
 		}
@@ -64,6 +96,24 @@ func (c *Client) Check(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// Вспомогательная функция для отлова специфичного кода Windows connectex (WSAECONNREFUSED)
+func isWindowsConnRefused(err error) bool {
+	if err == nil {
+		return false
+	}
+	// Разворачиваем возможный os.SyscallError
+	var sysErr *os.SyscallError
+	if errors.As(err, &sysErr) {
+		err = sysErr.Err
+	}
+	// Проверяем внутренний числовой код ошибки (10061 для Windows)
+	var errno syscall.Errno
+	if errors.As(err, &errno) {
+		return errno == 10061 // WSAECONNREFUSED
+	}
+	return false
 }
 
 // Функция чтения версии модуля 1С из локального Apache
@@ -99,7 +149,7 @@ func ShowApache1CModule(configPath string) error {
 
 // Функция проверки доступности и скорости RESTful-сервиса
 func (c *Client) CheckDataMobileService() error {
-	targetURL := c.cfg.Address + "/" + c.cfg.PublicationName + "/hs/DataMobileExch/"
+	targetURL := c.cfg.Apache.Address + "/" + c.cfg.Apache.PublicationName + "/hs/DataMobileExch/"
 	fmt.Printf("\n- GET to endpoint (DataMobile): %s\n", targetURL)
 
 	// Время до создания запроса (чтобы замер отклика был точным)
@@ -112,7 +162,7 @@ func (c *Client) CheckDataMobileService() error {
 	}
 
 	// Add Basic Auth
-	req.SetBasicAuth(c.cfg.DmUser, c.cfg.DmPass)
+	req.SetBasicAuth(c.cfg.DataMobile.User, c.cfg.DataMobile.Pass)
 
 	// Выполняем запрос через клиент
 	resp, err := c.httpClient.Do(req)
@@ -149,7 +199,7 @@ func (c *Client) CheckDataMobileService() error {
 		// Другие ошибки (401, 404, 500 и т.д.)
 		fmt.Printf("-- service error: status %d\n", resp.StatusCode)
 		if resp.StatusCode == http.StatusNotFound {
-			fmt.Printf("--- База %s не опубликована на web-сервере %s\n", c.cfg.PublicationName, c.cfg.Address)
+			fmt.Printf("--- База %s не опубликована на web-сервере %s\n", c.cfg.Apache.PublicationName, c.cfg.Apache.Address)
 		}
 		if resp.StatusCode == http.StatusUnauthorized {
 			fmt.Println("--- Неверный логин или пароль пользователя 1С.")
@@ -158,8 +208,8 @@ func (c *Client) CheckDataMobileService() error {
 
 	// Проверяем скорость работы (тормоза)
 	fmt.Printf("-- Время ответа сервера: %v", duration)
-	if duration > c.cfg.WarningDuration {
-		fmt.Printf(" Сервер сильно тормозит! Превышен лимит в %v\n", c.cfg.WarningDuration)
+	if duration > c.cfg.Apache.WarningDuration {
+		fmt.Printf(" Сервер сильно тормозит! Превышен лимит в %v\n", c.cfg.Apache.WarningDuration)
 	} else {
 		fmt.Printf(" Скорость работы в норме\n")
 	}

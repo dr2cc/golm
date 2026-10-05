@@ -32,7 +32,7 @@ func NewClient(lmcz config.LmczConfig, httpClient *http.Client) *Client {
 	}
 }
 
-func (c *Client) Check(ctx context.Context) (CheckResult, error) {
+func (c *Client) Status(ctx context.Context) (CheckResult, error) {
 	var hostPort string
 
 	if c.cfg.Host == "" {
@@ -133,7 +133,7 @@ func (c *Client) Init(ctx context.Context) error {
 	// 1. Делаем предварительную проверку статуса.
 	// Метод Check сам разберется: сканировать сеть или брать жесткий Host,
 	// очистит префиксы, сделает GET-запрос и вернет строковый статус.
-	checkResult, err := c.Check(ctx)
+	checkResult, err := c.Status(ctx)
 	if err != nil {
 		return fmt.Errorf("предварительная проверка статуса перед инициализацией провалена: %w", err)
 	}
