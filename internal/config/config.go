@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dr2cc/golm/internal/util/urlutil"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -24,6 +25,7 @@ func printGlobalUsage() {
 type ApacheConfig struct {
 	PublicationName string        `yaml:"publication_name"`
 	Address         string        `yaml:"address"`
+	Port            string        `yaml:"port"`
 	ConfPath        string        `yaml:"conf_path"`
 	WarningDuration time.Duration `yaml:"warning_duration"`
 }
@@ -52,6 +54,17 @@ type Config struct {
 	Apache               ApacheConfig     `yaml:"apache"`
 	DataMobile           DataMobileConfig `yaml:"datamobile"`
 	LMCZ                 LmczConfig       `yaml:"lmcz"`
+}
+
+// Рефакторинг добавления port в конфигурацию.
+// BaseURL собирает полный префикс адреса (включая протокол и порт) для HTTP-запросов.
+// Метод не нужно прописывать в YAML, он работает на основе существующих полей.
+func (a ApacheConfig) BaseURL() string {
+	// Ваша функция уберет http:// и красиво склеит хост с портом
+	cleanHostPort := urlutil.JoinHostPort(a.Address, a.Port)
+
+	// Возвращаем готовую строку, которую сразу поймет http.Client
+	return "http://" + cleanHostPort
 }
 
 // switch cfg.Command {
