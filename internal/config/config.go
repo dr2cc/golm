@@ -96,8 +96,17 @@ func New() (*Config, error) {
 	// 4. Привязываем флаги командной строки к полям созданного объекта.
 	// В качестве дефолтных значений передаем то, что прочитано из файла YAML.
 	flag.BoolVar(&cfg.LaunchDataMobile, "dm", cfg.LaunchDataMobile, "Запустить проверку DataMobile-Apache-1C")
-	flag.BoolVar(&cfg.LaunchLmczStatus, "lm", cfg.LaunchLmczStatus, "Запустить тест ЛМ ЧЗ")
+	flag.BoolVar(&cfg.LaunchLmczStatus, "status", cfg.LaunchLmczStatus, "Запустить тест ЛМ ЧЗ")
 	flag.BoolVar(&cfg.LaunchLmczInit, "token", cfg.LaunchLmczInit, "Инициализировать ЛМ ЧЗ")
+
+	// Переопределяем стандартный вывод ошибок и подсказок, чтобы не получить странную строку при неправильном флаге.
+	flag.Usage = func() {
+		// Подменяем os.Args[0] на красивое имя
+		os.Args[0] = "golm"
+
+		fmt.Fprintf(flag.CommandLine.Output(), "Usage of %s:\n", os.Args[0])
+		flag.PrintDefaults()
+	}
 
 	// 5. Парсим флаги.
 	// Если пользователь передаст флаг в терминале (-dm),

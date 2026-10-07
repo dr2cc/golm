@@ -29,6 +29,7 @@ type DiagnosticSuite struct {
 	client        *Client
 }
 
+// Главный смысл этого конструктора- создание экземпляра DiagnosticSuite с его методами.
 // В конструктор передаем только то, что реально нужно для диагностики.
 // Передавать можно по указателю (*ApacheConfig) или по значению,
 // в зависимости от текущих предпочтений.
@@ -209,7 +210,7 @@ func (ds *DiagnosticSuite) checkDataMobileService(ctx context.Context) error {
 	duration := time.Since(startTime)
 
 	// Выводим скорость работы (тормоза) независимо от статуса, так как замер уже сделан
-	fmt.Printf("-- Время ответа сервера: %v", duration)
+	fmt.Printf("-- Версии 1С в публикации и ИБ совпадают. Время ответа: %v", duration)
 	if duration > ds.apacheCfg.WarningDuration {
 		fmt.Printf(" Сервер сильно тормозит! Превышен лимит в %v\n", ds.apacheCfg.WarningDuration)
 	} else {
@@ -247,18 +248,19 @@ func (ds *DiagnosticSuite) checkDataMobileService(ctx context.Context) error {
 			fmt.Println("--- Неверный логин или пароль пользователя 1С.")
 		}
 
-		// ВАЖНО: Возвращаем ошибку здесь, чтобы код не шел дальше пытаться парсить HTML как JSON
+		// ВАЖНО: Возвращаем ошибку здесь, чтобы код не шел дальше пытаться парсить возвращаемый 1С HTML как JSON
 		return fmt.Errorf("mobile service responded with status %d", resp.StatusCode)
 	}
 
-	// Парсим JSON ответ от 1С (сюда код дойдет ТОЛЬКО при статусе 200 OK)
+	// Парсим JSON ответ от hs DataMobile (значит, 1С ни к чему не придралась и пропустила запрос).
+	// Сюда код дойдет ТОЛЬКО при статусе 200 OK
 	var result DataMobileResponse
 	err = json.NewDecoder(resp.Body).Decode(&result)
 	if err != nil {
-		return fmt.Errorf(" ОШИБКА JSON: Не удалось прочитать ответ от 1С. Детали: %w\n", err)
+		return fmt.Errorf(" ОШИБКА JSON: Не удалось прочитать ответ. Детали: %w\n", err)
 	}
 
-	// Выводим статус, который прислала сама 1С
+	// Выводим статус, который прислал hs DataMobile
 	fmt.Printf("-- data: %s\n", strings.TrimSpace(result.Data))
 
 	return nil

@@ -13,7 +13,7 @@ datamobile:
 apache:
   publication_name: "tradeProfilDm"
   # tradeProfilDm / polyMark
-  address: "localhost"
+  address: "192.168.0.75"
   # 192.168.0.75 / localhost
   port: ""
   conf_path: C:/Apache24/conf/httpd.conf

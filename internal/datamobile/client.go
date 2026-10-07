@@ -29,7 +29,7 @@ func NewClient(cfg ClientConfig, httpClient *http.Client) *Client {
 }
 
 func (c *Client) Check(ctx context.Context) error {
-	// Создаем координатор проверок, передавая туда точечные конфиги и самого клиента
+	// Создаем координатор проверок, передавая туда точечные конфиги и сам клиента
 	suite := NewDiagnosticSuite(c.cfg.Apache, c.cfg.DataMobile, c)
 	return suite.Run(ctx)
 }
