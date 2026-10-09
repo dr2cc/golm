@@ -20,7 +20,6 @@ func main() {
 	// Явное лучше неявного (Explicit over Implicit):
 	// Функция app.Run(cfg) декларирует: «Мне для работы нужен cfg»
 	if err := app.Run(*cfg); err != nil {
-		// log.Fatalf("error: %s", err)
 		// Выводим ТОЛЬКО текст ошибки в поток ошибок, без даты и системных приписок
 		fmt.Fprintf(os.Stderr, "Server response: %v\n", err)
 		os.Exit(1) // Завершаем программу чисто с кодом 1

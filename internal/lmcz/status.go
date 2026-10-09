@@ -22,9 +22,6 @@ func (c *Client) Status(ctx context.Context) (CheckResult, error) {
 	} else {
 		// Очищаем хост от схемы
 		hostPort = urlutil.JoinHostPort(c.cfg.Host, c.cfg.Port)
-		// 	cleanHost := strings.TrimPrefix(c.cfg.Host, "http://")
-		// 	cleanHost = strings.TrimPrefix(cleanHost, "https://")
-		// 	hostPort = net.JoinHostPort(cleanHost, c.cfg.Port)
 	}
 
 	if hostPort == "" {
@@ -89,7 +86,6 @@ func (c *Client) Status(ctx context.Context) (CheckResult, error) {
 	// _, err = io.Copy(out, resp.Body)
 	//
 
-	// Отправляем содержимое тела ответа в стандартный поток вывода
 	// Коротко про "стандартный поток вывода" (stdout).
 	// В операционных системах (Linux, Windows, macOS)
 	// у каждой программы при старте есть три стандартных потока данных:

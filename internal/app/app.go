@@ -52,8 +52,7 @@ func Run(cfg config.Config) error {
 
 	// Эндпойнт /init
 	if cfg.LaunchLmczInit {
-		log.Printf("Отправляем токен для инициализации %s...\n", cfg.LMCZ.Host)
-		// log.Println("Инициализация ЛМ ЧЗ...")
+		log.Printf("Отправка токена для инициализации %s:%s...\n", cfg.LMCZ.Host, cfg.LMCZ.Port)
 		czClient := lmcz.NewClient(cfg.LMCZ, httpClient)
 
 		return czClient.Init(ctx)
@@ -61,6 +60,5 @@ func Run(cfg config.Config) error {
 
 	exeName := filepath.Base(os.Args[0])
 	fmt.Fprintf(os.Stderr, "Hи один клиент не был выбран через флаги запуска.\nИспользуйте \"%s <команда> -h\" для просмотра флагов конкретной команды.\n", exeName)
-	// log.Println("Hи один клиент не был выбран через флаги запуска.")
 	return nil
 }

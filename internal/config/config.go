@@ -4,23 +4,12 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/dr2cc/golm/internal/util/urlutil"
 	"go.yaml.in/yaml/v3"
 )
-
-// Функция для вывода общей справки по приложению
-func printGlobalUsage() {
-	exeName := filepath.Base(os.Args[0])
-	fmt.Fprintf(os.Stderr, "Использование: %s <команда> [флаги]\n\n", exeName)
-	fmt.Fprintf(os.Stderr, "Команды:\n")
-	fmt.Fprintf(os.Stderr, "  get   Запуск сканирования сети\n")
-	fmt.Fprintf(os.Stderr, "  post  Отправка данных на сервер\n\n")
-	fmt.Fprintf(os.Stderr, "Используйте \"%s <команда> -h\" для просмотра флагов конкретной команды.\n", exeName)
-}
 
 type ApacheConfig struct {
 	PublicationName string        `yaml:"publication_name"`
@@ -67,16 +56,9 @@ func (a ApacheConfig) BaseURL() string {
 	return "http://" + cleanHostPort
 }
 
-// switch cfg.Command {
-// case "get":
-// 	getCmd := flag.NewFlagSet("get", flag.ExitOnError)
-// case "post":
-// 	postCmd := flag.NewFlagSet("post", flag.ExitOnError)
-
 // New() парсит флаги и возвращает готовую конфигурацию.
 // Когда будем читать переменные окружения или .env файл, код поменяется только тут.
 func New() (*Config, error) {
-	// Вариант 03.
 	// 1. Инициализируем пустую структуру
 	cfg := &Config{}
 
@@ -115,90 +97,6 @@ func New() (*Config, error) {
 
 	// Вызываем проверку проблем среды уже при создании конфига
 	cfg.validateEnvironment()
-
-	// // Вариант 02 (apache + 1С)
-	// cfg := &Config{
-	// 	// Инициализируем вложенную структуру DataMobile
-	// 	DataMobile: DataMobileConfig{
-	// 		PublicationName: "polyMark",
-	// 		ApacheAddress:   "localhost",                   // 192.168.0.75 / localhost
-	// 		ConfigPath:      `C:\Apache24\conf\httpd.conf`, // ssh drk@192.168.0.75 cd /etc/apache2/ apache2.conf // Путь к конфигурационному файлу Apache (для Windows или Linux)
-	// 		RequestTimeout:  5 * time.Second,               // Используем тип time.Duration
-	// 		WarningDuration: 2 * time.Second,
-	// 		DbUser:          "admin",
-	// 		DbPass:          "",
-	// 	},
-	// }
-
-	// // Вызываем проверку сразу при создании конфига
-	// cfg.validateEnvironment()
-
-	// // Вариант 01 ❌ Текущая реализация функции config.New() нарушает принцип единственной ответственности (Single Responsibility Principle)
-	// // и содержит архитектурный антипаттерн,
-	// // так как конфигуратор берет на себя роль управления жизненным циклом приложения (os.Exit).
-
-	// // Проверяем, передал ли пользователь вообще команду
-	// if len(os.Args) < 2 {
-	// 	// Перехватываем вызов справки на самом верхнем уровне (до подкоманд)
-	// 	printGlobalUsage()
-	// 	os.Exit(1) // Завершаем программу сразу с кодом ошибки
-	// }
-
-	// if os.Args[1] == "-h" || os.Args[1] == "--help" || os.Args[1] == "help" {
-	// 	printGlobalUsage()
-	// 	os.Exit(0) // Успешный выход после печати справки
-	// }
-
-	// cfg.Command = os.Args[1]
-
-	// switch cfg.Command {
-	// case "get":
-	// 	getCmd := flag.NewFlagSet("get", flag.ExitOnError)
-	// 	host := getCmd.String("host", "", "target host")
-	// 	subnet := getCmd.String("s", "192.168.0", "target subnet")
-	// 	port := getCmd.String("p", "5995", "target port")
-	// 	timeout := getCmd.Duration("t", 500*time.Millisecond, "scanner timeout")
-
-	// 	// Парсим аргументы начиная со 2-го индекса (пропуская имя программы и само слово 'get')
-	// 	if err := getCmd.Parse(os.Args[2:]); err != nil {
-	// 		return nil, err
-	// 	}
-
-	// 	cfg.Host = *host
-	// 	cfg.Subnet = *subnet
-	// 	cfg.Port = *port
-	// 	cfg.ScannerTimeout = *timeout
-
-	// case "post":
-	// 	postCmd := flag.NewFlagSet("post", flag.ExitOnError)
-	// 	host := postCmd.String("host", "localhost", "target host")
-	// 	port := postCmd.String("p", "5997", "target port")
-	// 	username := postCmd.String("u", "admin", "username")
-	// 	password := postCmd.String("pass", "admin", "password")
-	// 	token := postCmd.String("token", "", "auth token to send (required)")
-
-	// 	if err := postCmd.Parse(os.Args[2:]); err != nil {
-	// 		return nil, err
-	// 	}
-
-	// 	if *token == "" {
-	// 		// Если токена нет, принудительно покажем справку для post
-	// 		fmt.Println("flag -token is required for 'post' command")
-	// 		postCmd.Usage()
-	// 		os.Exit(1)
-	// 		// return nil, errors.New("flag -token is required for 'post' command")
-	// 	}
-
-	// 	cfg.Host = *host
-	// 	cfg.Port = *port
-	// 	cfg.Username = *username
-	// 	cfg.Password = *password
-	// 	cfg.Token = *token
-	// 	cfg.ScannerTimeout = 500 * time.Millisecond // дефолт
-
-	// default:
-	// 	return nil, fmt.Errorf("unknown command: %s. Choose 'get' or 'post'", cfg.Command)
-	// }
 
 	return cfg, nil
 }

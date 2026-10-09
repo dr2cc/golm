@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -22,7 +23,7 @@ func (c *Client) Init(ctx context.Context) error {
 	// очистит префиксы, сделает GET-запрос и вернет строковый статус.
 	checkResult, err := c.Status(ctx)
 	if err != nil {
-		return fmt.Errorf("предварительная проверка статуса перед инициализацией провалена: %w", err)
+		return fmt.Errorf("предварительная проверка статуса перед инициализацией неудачна: %w", err)
 	}
 
 	fmt.Printf("LMCZ server response: (%d) status: %s\n", checkResult.HttpCode, checkResult.Status)
@@ -33,7 +34,7 @@ func (c *Client) Init(ctx context.Context) error {
 		return nil
 	}
 
-	fmt.Println("Сервер не настроен. Отправка токена...")
+	fmt.Println("Server not configured. Sending token....")
 
 	// 3. Вызываем приватный метод для отправки токена.
 	// Так как в Check мы уже гарантированно проверили адрес, мы можем вызвать
@@ -98,7 +99,13 @@ func (c *Client) sendToken(ctx context.Context, hostPort string) error {
 	// Если статус 2xx — успешно декодируем финальный ответ
 	var result InitResponsePayload
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return fmt.Errorf("failed to decode JSON response: %w", err)
+		// При успешной инициализации возвращается пустое тело и StatusOK,
+		if errors.Is(err, io.EOF) {
+			fmt.Printf("Успех (%d)!", resp.StatusCode)
+			return nil
+		}
+		// Вдруг что-то еще..
+		return fmt.Errorf("failed to decode JSON response (HTTP %d): %w", resp.StatusCode, err)
 	}
 
 	fmt.Printf("Ответ сервера на инициализацию: %s (Сообщение: %s)\n", result.Status, result.Message)
