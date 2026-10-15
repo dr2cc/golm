@@ -1,7 +1,6 @@
 package datamobile
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/dr2cc/golm/internal/config"
@@ -13,23 +12,50 @@ type ClientConfig struct {
 	DataMobile config.DataMobileConfig
 }
 
-type Client struct {
-	cfg        ClientConfig
+type DmClient struct {
 	httpClient *http.Client
+	cfg        ClientConfig
 }
 
-func NewClient(cfg ClientConfig, httpClient *http.Client) *Client {
-	// После добавления
-	// cfg.Apache.BaseURL()
-	// Никаких склеек и проверок строк здесь больше не нужно! Конфиг сохраняется в своем первозданном виде.
-	return &Client{
-		cfg:        cfg,
+// The provided HTTP client will be mutated for use with Dm, so it should not
+// be reused elsewhere.
+// Переданный HTTP-клиент будет изменен для работы с Dm, поэтому его не следует
+// использовать где-либо еще.
+func NewDmClient(httpClient *http.Client, cfg ClientConfig) *DmClient {
+	// 1. Проверяем: если транспорт nil, берем стандартный движок Go
+	baseTransport := httpClient.Transport
+	if baseTransport == nil {
+		baseTransport = http.DefaultTransport
+	}
+
+	// 2. Оборачиваем его в ваш кастомный dmTransport
+	httpClient.Transport = newDmTransport(cfg.DataMobile.User, cfg.DataMobile.Pass, baseTransport)
+
+	// // Transport adds auth headers
+	// // Добавлю в этот клиент
+	// httpClient.Transport = newDmTransport(cfg.DataMobile.User, cfg.DataMobile.Pass, httpClient.Transport)
+	return &DmClient{
 		httpClient: httpClient,
+		cfg:        cfg,
 	}
 }
 
-func (c *Client) Check(ctx context.Context) error {
-	// Создаем координатор проверок, передавая туда точечные конфиги и сам клиента
-	suite := NewDiagnosticSuite(c.cfg.Apache, c.cfg.DataMobile, c)
-	return suite.Run(ctx)
+type dmTransport struct {
+	rp       http.RoundTripper
+	username string
+	password string
+}
+
+func newDmTransport(user, pass string, rp http.RoundTripper) *dmTransport {
+	return &dmTransport{
+		rp:       rp,
+		username: user,
+		password: pass,
+	}
+}
+
+func (dt *dmTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	// req.Header.Set("Authorization", "Bearer "+dt.token)
+	req.SetBasicAuth(dt.username, dt.password)
+	return dt.rp.RoundTrip(req)
 }

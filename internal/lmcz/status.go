@@ -13,7 +13,7 @@ import (
 	"github.com/dr2cc/golm/internal/util/urlutil"
 )
 
-func (c *Client) Status(ctx context.Context) (CheckResult, error) {
+func (c *CzClient) Status(ctx context.Context) (CheckResult, error) {
 	var hostPort string
 
 	if c.cfg.Host == "" {

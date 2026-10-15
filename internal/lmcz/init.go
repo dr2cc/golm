@@ -17,7 +17,7 @@ import (
 
 // Init — публичный метод. Он координирует процесс: проверяет статус
 // и при необходимости выполняет инициализацию, переиспользуя логику Check.
-func (c *Client) Init(ctx context.Context) error {
+func (c *CzClient) Init(ctx context.Context) error {
 	// 1. Делаем предварительную проверку статуса.
 	// Метод Check сам разберется: сканировать сеть или брать жесткий Host,
 	// очистит префиксы, сделает GET-запрос и вернет строковый статус.
@@ -49,7 +49,7 @@ func (c *Client) Init(ctx context.Context) error {
 
 // sendToken — приватный метод. Отвечает строго за техническую
 // отправку POST-запроса на конкретный хост.
-func (c *Client) sendToken(ctx context.Context, hostPort string) error {
+func (c *CzClient) sendToken(ctx context.Context, hostPort string) error {
 	payload := InitRequestPayload{Token: c.cfg.TokenXAPIKEY}
 
 	jsonBytes, err := json.Marshal(payload)
@@ -113,7 +113,7 @@ func (c *Client) sendToken(ctx context.Context, hostPort string) error {
 }
 
 // Вспомогательный приватный метод, чтобы не дублировать логику склейки хоста и порта
-func (c *Client) getTargetHostPort() string {
+func (c *CzClient) getTargetHostPort() string {
 	if c.cfg.Host == "" {
 		// Если хост пустой, значит на этапе Check мы сканировали сеть.
 		// Чтобы не запускать ScanSubnet повторно (это долго), сканер должен уметь

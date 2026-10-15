@@ -26,14 +26,14 @@ import (
 type DiagnosticSuite struct {
 	apacheCfg     config.ApacheConfig
 	dataMobileCfg config.DataMobileConfig
-	client        *Client
+	client        *DmClient
 }
 
 // Главный смысл этого конструктора- создание экземпляра DiagnosticSuite с его методами.
 // В конструктор передаем только то, что реально нужно для диагностики.
 // Передавать можно по указателю (*ApacheConfig) или по значению,
 // в зависимости от текущих предпочтений.
-func NewDiagnosticSuite(apacheCfg config.ApacheConfig, dmCfg config.DataMobileConfig, client *Client) *DiagnosticSuite {
+func NewDiagnosticSuite(apacheCfg config.ApacheConfig, dmCfg config.DataMobileConfig, client *DmClient) *DiagnosticSuite {
 	return &DiagnosticSuite{
 		apacheCfg:     apacheCfg,
 		dataMobileCfg: dmCfg,
@@ -41,24 +41,34 @@ func NewDiagnosticSuite(apacheCfg config.ApacheConfig, dmCfg config.DataMobileCo
 	}
 }
 
+// Создаем координатор проверок, передавая туда точечные конфигурации и сам клиента
+func (c *DmClient) Check(ctx context.Context) error {
+	suite := NewDiagnosticSuite(c.cfg.Apache, c.cfg.DataMobile, c)
+	return suite.Run(ctx)
+}
+
 // Run — координатор
 func (ds *DiagnosticSuite) Run(ctx context.Context) error {
-	// 1. Сначала проверяем только сам Apache
+	// 1. Проверяем Apache
 	isAlive, err := ds.pingApache(ctx)
 	if err != nil {
 		return fmt.Errorf("Connection failure! %w", err)
 	}
 
 	// Если статус некорректный (например, 5xx), завершаем проверку досрочно без ошибки.
-	// Ведь Apache ответил, но глубокая диагностика сейчас невозможна.
+	// Apache ответил, но глубокая диагностика сейчас невозможна.
 	if !isAlive {
 		return nil
 	}
 
-	// 2. Если Apache "живой", формируем цепочку последующих проверок
+	// 2. Цепочка последующих проверок. Реализуем паттерн пайплайна (последовательности шагов).
+	// Создаём и инициализируем слайс именованных функций.
 	subSteps := []func(ctx context.Context) error{
-		ds.checkLocalConfig,
-		ds.checkDataMobileService,
+		// Каждый элемент слайса — это функция, которая:
+		// - Принимает один аргумент — контекст выполнения (ctx типа context.Context).
+		// - Возвращает одно значение — ошибку (error)
+		ds.checkLocalApache1C,
+		ds.checkDataMobileExch,
 	}
 
 	for _, step := range subSteps {
@@ -139,9 +149,10 @@ func isWindowsConnRefused(err error) bool {
 	return false
 }
 
-func (ds *DiagnosticSuite) checkLocalConfig(ctx context.Context) error {
-	// Чисто, коротко и понятно, откуда берутся данные
+func (ds *DiagnosticSuite) checkLocalApache1C(ctx context.Context) error {
+	// Коротко и понятно, откуда берутся данные
 	addr := ds.apacheCfg.BaseURL()
+
 	if !strings.Contains(addr, "127.0.0.1") && !strings.Contains(addr, "localhost") {
 		return nil
 	}
@@ -183,8 +194,8 @@ func ShowApache1CModule(configPath string) error {
 	return nil
 }
 
-// checkDataMobileService — Функция проверки доступности и скорости RESTful-сервиса
-func (ds *DiagnosticSuite) checkDataMobileService(ctx context.Context) error {
+// checkDataMobileExch — функция проверки доступности и скорости RESTful-сервиса DataMobileExch
+func (ds *DiagnosticSuite) checkDataMobileExch(ctx context.Context) error {
 	targetURL := ds.apacheCfg.BaseURL() + "/" + ds.apacheCfg.PublicationName + "/hs/DataMobileExch/"
 	fmt.Printf("\n- GET to endpoint (DataMobile): %s\n", targetURL)
 
@@ -197,8 +208,10 @@ func (ds *DiagnosticSuite) checkDataMobileService(ctx context.Context) error {
 		return fmt.Errorf("-- Не удалось создать HTTP-запрос. Детали: %w", err)
 	}
 
-	// Add Basic Auth
-	req.SetBasicAuth(ds.dataMobileCfg.User, ds.dataMobileCfg.Pass)
+	// // Закомментировал после добавления http.RoundTripper в golm\internal\datamobile\client.go
+	// // 15.10.26 - паникует!
+	// // Add Basic Auth
+	// req.SetBasicAuth(ds.dataMobileCfg.User, ds.dataMobileCfg.Pass)
 
 	// Выполняем запрос через клиент
 	resp, err := ds.client.httpClient.Do(req)
