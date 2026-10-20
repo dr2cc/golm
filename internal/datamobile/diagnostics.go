@@ -223,7 +223,7 @@ func (ds *DiagnosticSuite) checkDataMobileExch(ctx context.Context) error {
 	duration := time.Since(startTime)
 
 	// Выводим скорость работы (тормоза) независимо от статуса, так как замер уже сделан
-	fmt.Printf("-- Версии 1С в публикации и ИБ совпадают. Время ответа: %v", duration)
+	fmt.Printf("-- Время ответа сервера: %v", duration)
 	if duration > ds.apacheCfg.WarningDuration {
 		fmt.Printf(" Сервер сильно тормозит! Превышен лимит в %v\n", ds.apacheCfg.WarningDuration)
 	} else {

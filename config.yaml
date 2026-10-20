@@ -7,11 +7,11 @@ launch_lmcz_init: false
 client_request_timeout: "10s"   # Будет автоматически распарсено в time.Duration
 
 datamobile:
-  user: "admin"
-  pass: ""
+  user: "tur"
+  pass: "q73wert89y"
 
 apache:
-  publication_name: "tradeProfilDm"
+  publication_name: "tradeProfil11"
   # tradeProfilDm / polyMark
   address: "192.168.0.75"
   # 192.168.0.75 / localhost
