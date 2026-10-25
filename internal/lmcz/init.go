@@ -7,12 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
-	"strings"
-
-	"github.com/dr2cc/golm/internal/scanner"
 )
 
 // Init — публичный метод. Он координирует процесс: проверяет статус
@@ -21,25 +17,36 @@ func (c *CzClient) Init(ctx context.Context) error {
 	// 1. Делаем предварительную проверку статуса.
 	// Метод Check сам разберется: сканировать сеть или брать жесткий Host,
 	// очистит префиксы, сделает GET-запрос и вернет строковый статус.
-	checkResult, err := c.Status(ctx)
+	//
+	// [GUI-рефакторинг] Вместо c.Status(ctx) вызываем его две части по отдельности:
+	// адрес находим один раз (resolveHostPort) и запоминаем в hostPort,
+	// а затем используем его и для проверки статуса, и для отправки токена (шаг 3).
+	// Раньше на шаге 3 вызывался getTargetHostPort(), который при пустом Host
+	// сканировал подсеть второй раз. Текст ошибок для пользователя остался прежним.
+	hostPort, err := c.resolveHostPort()
 	if err != nil {
 		return fmt.Errorf("предварительная проверка статуса перед инициализацией неудачна: %w", err)
 	}
 
-	fmt.Printf("LMCZ server response: (%d) status: %s\n", checkResult.HttpCode, checkResult.Status)
+	checkResult, err := c.statusAt(ctx, hostPort)
+	if err != nil {
+		return fmt.Errorf("предварительная проверка статуса перед инициализацией неудачна: %w", err)
+	}
+
+	// [GUI-рефакторинг] Здесь и ниже fmt.Printf/Println заменены на fmt.Fprintf/Fprintln(c.out, ...),
+	// чтобы вывод можно было перенаправить в GUI. В CLI c.out == os.Stdout, текст тот же.
+	fmt.Fprintf(c.out, "LMCZ server response: (%d) status: %s\n", checkResult.HttpCode, checkResult.Status)
 
 	// 2. Бизнес-логика: отправляем токен только если сервер не настроен
 	if checkResult.Status != "not_configured" {
-		fmt.Println("Сервер LMCZ уже настроен. Отправка токена инициализации не требуется.")
+		fmt.Fprintln(c.out, "Сервер LMCZ уже настроен. Отправка токена инициализации не требуется.")
 		return nil
 	}
 
-	fmt.Println("Server not configured. Sending token....")
+	fmt.Fprintln(c.out, "Server not configured. Sending token....")
 
 	// 3. Вызываем приватный метод для отправки токена.
-	// Так как в Check мы уже гарантированно проверили адрес, мы можем вызвать
-	// вспомогательную функцию для получения правильного hostPort, чтобы не сканировать сеть дважды.
-	hostPort := c.getTargetHostPort()
+	// [GUI-рефакторинг] hostPort уже найден на шаге 1 — повторного сканирования нет.
 	if err := c.sendToken(ctx, hostPort); err != nil {
 		return err
 	}
@@ -101,28 +108,18 @@ func (c *CzClient) sendToken(ctx context.Context, hostPort string) error {
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		// При успешной инициализации возвращается пустое тело и StatusOK,
 		if errors.Is(err, io.EOF) {
-			fmt.Printf("Успех (%d)!", resp.StatusCode)
+			fmt.Fprintf(c.out, "Успех (%d)!", resp.StatusCode)
 			return nil
 		}
 		// Вдруг что-то еще..
 		return fmt.Errorf("failed to decode JSON response (HTTP %d): %w", resp.StatusCode, err)
 	}
 
-	fmt.Printf("Ответ сервера на инициализацию: %s (Сообщение: %s)\n", result.Status, result.Message)
+	fmt.Fprintf(c.out, "Ответ сервера на инициализацию: %s (Сообщение: %s)\n", result.Status, result.Message)
 	return nil
 }
 
-// Вспомогательный приватный метод, чтобы не дублировать логику склейки хоста и порта
-func (c *CzClient) getTargetHostPort() string {
-	if c.cfg.Host == "" {
-		// Если хост пустой, значит на этапе Check мы сканировали сеть.
-		// Чтобы не запускать ScanSubnet повторно (это долго), сканер должен уметь
-		// возвращать кешированный или первый найденный результат, либо
-		// (если ScanSubnet быстрый) вызываем его:
-		return scanner.ScanSubnet(c.cfg.Subnet, c.cfg.Port, c.cfg.ScannerTimeout)
-	}
-
-	cleanHost := strings.TrimPrefix(c.cfg.Host, "http://")
-	cleanHost = strings.TrimPrefix(cleanHost, "https://")
-	return net.JoinHostPort(cleanHost, c.cfg.Port)
-}
+// [GUI-рефакторинг] Здесь был метод getTargetHostPort(). Он удален:
+// - при пустом Host он запускал ScanSubnet второй раз (сначала в Status, потом здесь);
+// - при заданном Host дублировал urlutil.JoinHostPort, но без порта по умолчанию.
+// Теперь Init получает адрес один раз через resolveHostPort() (см. status.go).

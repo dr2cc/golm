@@ -1,7 +1,9 @@
 package datamobile
 
 import (
+	"io"
 	"net/http"
+	"os"
 
 	"github.com/dr2cc/golm/internal/config"
 )
@@ -15,6 +17,11 @@ type ClientConfig struct {
 type DmClient struct {
 	httpClient *http.Client
 	cfg        ClientConfig
+
+	// [GUI-рефакторинг] out — куда диагностика пишет сообщения о ходе проверки.
+	// Раньше DiagnosticSuite печатал напрямую через fmt.Printf (всегда в консоль).
+	// Для CLI out == os.Stdout (вывод не изменился), GUI подставляет свой writer.
+	out io.Writer
 }
 
 // The provided HTTP client will be mutated for use with Dm, so it should not
@@ -37,7 +44,16 @@ func NewDmClient(httpClient *http.Client, cfg ClientConfig) *DmClient {
 	return &DmClient{
 		httpClient: httpClient,
 		cfg:        cfg,
+		// [GUI-рефакторинг] По умолчанию — консоль, сигнатура конструктора не изменилась.
+		out: os.Stdout,
 	}
+}
+
+// [GUI-рефакторинг] SetOutput перенаправляет вывод диагностики (используется GUI).
+// Возвращает сам клиент, чтобы можно было писать цепочкой.
+func (c *DmClient) SetOutput(w io.Writer) *DmClient {
+	c.out = w
+	return c
 }
 
 type dmTransport struct {
