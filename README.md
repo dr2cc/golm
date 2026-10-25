@@ -22,11 +22,22 @@ go run ./cmd/golm -status
 go run ./cmd/golm -token
 ```
 
+## Графический интерфейс
+
+В папке [`gui/`](gui/README.md) лежит оконная версия на Wails + Svelte с теми же проверками и редактором `config.yaml`.
+Консольная утилита от GUI не зависит и собирается как раньше.
+
+```sh
+cd gui
+wails build -platform windows/amd64   # → gui/build/bin/golm-gui.exe
+```
+
 ## Структура проекта
 
 ```
 golm/
 ├── config.yaml           # Файл с настройками
+├── gui/                  # Оконная версия (Wails + Svelte), отдельный Go-модуль
 │
 ├── cmd/
 │   └── golm/
