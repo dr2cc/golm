@@ -10,6 +10,8 @@
   --ok-bg: #e5f5ec;
   --err: #c7362b;
   --err-bg: #fbe9e7;
+  --warn: #a15c00;
+  --warn-bg: #fdf1dc;
   --log-bg: #11161f;
   --log-text: #d6dde8;
   --radius: 8px;
@@ -33,6 +35,8 @@
     --ok-bg: #173327;
     --err: #ff7b70;
     --err-bg: #3a1d1b;
+    --warn: #f0b350;
+    --warn-bg: #3a2c14;
     --log-bg: #0c1016;
     color-scheme: dark;
   }

@@ -9,6 +9,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+
+	"github.com/dr2cc/golm/internal/report"
 )
 
 // Init — публичный метод. Он координирует процесс: проверяет статус
@@ -23,12 +25,17 @@ func (c *CzClient) Init(ctx context.Context) error {
 	// а затем используем его и для проверки статуса, и для отправки токена (шаг 3).
 	// Раньше на шаге 3 вызывался getTargetHostPort(), который при пустом Host
 	// сканировал подсеть второй раз. Текст ошибок для пользователя остался прежним.
-	hostPort, err := c.resolveHostPort()
+	//
+	// [GUI-статусы] Части вызываются через обертки findServer / queryStatus (steps.go),
+	// чтобы GUI видел итог каждого шага. В CLI шаги никуда не отправляются.
+	steps := report.NewTracker(c.onStep, stepFind, stepStatus, stepToken)
+
+	hostPort, err := c.findServer(steps)
 	if err != nil {
 		return fmt.Errorf("предварительная проверка статуса перед инициализацией неудачна: %w", err)
 	}
 
-	checkResult, err := c.statusAt(ctx, hostPort)
+	checkResult, err := c.queryStatus(ctx, steps, hostPort)
 	if err != nil {
 		return fmt.Errorf("предварительная проверка статуса перед инициализацией неудачна: %w", err)
 	}
@@ -40,6 +47,7 @@ func (c *CzClient) Init(ctx context.Context) error {
 	// 2. Бизнес-логика: отправляем токен только если сервер не настроен
 	if checkResult.Status != "not_configured" {
 		fmt.Fprintln(c.out, "Сервер LMCZ уже настроен. Отправка токена инициализации не требуется.")
+		steps.Done(StepToken, report.Skipped, "не требуется: сервер уже настроен")
 		return nil
 	}
 
@@ -47,9 +55,12 @@ func (c *CzClient) Init(ctx context.Context) error {
 
 	// 3. Вызываем приватный метод для отправки токена.
 	// [GUI-рефакторинг] hostPort уже найден на шаге 1 — повторного сканирования нет.
+	steps.Start(StepToken)
 	if err := c.sendToken(ctx, hostPort); err != nil {
+		steps.Done(StepToken, report.Fail, err.Error())
 		return err
 	}
+	steps.Done(StepToken, report.OK, "токен принят сервером")
 
 	return nil
 }

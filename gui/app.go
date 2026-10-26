@@ -17,6 +17,7 @@ import (
 	"github.com/dr2cc/golm/internal/config"
 	"github.com/dr2cc/golm/internal/datamobile"
 	"github.com/dr2cc/golm/internal/lmcz"
+	"github.com/dr2cc/golm/internal/report"
 )
 
 // App — мост между фронтендом и логикой golm.
@@ -30,6 +31,10 @@ type App struct {
 	// Вынесено в поле, чтобы тесты могли подставить свой сборщик строк вместо Wails.
 	emit func(line string)
 
+	// emitStep отправляет во фронтенд изменение статуса шага (событие "step").
+	// Как и emit, вынесено в поле ради тестов.
+	emitStep report.Func
+
 	// Одновременно выполняется только одна операция:
 	// так лог в окне не перемешивается, а сеть не сканируется параллельно дважды.
 	busy sync.Mutex
@@ -42,6 +47,7 @@ func NewApp() *App {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	a.emit = func(line string) { runtime.EventsEmit(ctx, "log", line) }
+	a.emitStep = func(s report.Step) { runtime.EventsEmit(ctx, "step", s) }
 }
 
 // resolveConfigPath ищет config.yaml:
@@ -208,7 +214,7 @@ func (a *App) CheckDataMobile() error {
 			Apache:     cfg.Apache,
 			DataMobile: cfg.DataMobile,
 		})
-		client.SetOutput(out)
+		client.SetOutput(out).SetStepHandler(a.emitStep)
 		return client.Check(ctx)
 	})
 }
@@ -217,7 +223,7 @@ func (a *App) CheckDataMobile() error {
 func (a *App) LmczStatus() (LmczStatusResult, error) {
 	var result LmczStatusResult
 	err := a.run("Запуск проверки ЛМ ЧЗ...", func(ctx context.Context, cfg *config.Config, out *lineWriter) error {
-		checkResult, err := lmcz.NewCzClient(cfg.LMCZ, newHTTPClient()).SetOutput(out).Status(ctx)
+		checkResult, err := lmcz.NewCzClient(cfg.LMCZ, newHTTPClient()).SetOutput(out).SetStepHandler(a.emitStep).Status(ctx)
 		if err != nil {
 			return err
 		}
@@ -231,7 +237,7 @@ func (a *App) LmczStatus() (LmczStatusResult, error) {
 // LmczInit — аналог `golm -token`.
 func (a *App) LmczInit() error {
 	return a.run("Отправка токена для инициализации ЛМ ЧЗ...", func(ctx context.Context, cfg *config.Config, out *lineWriter) error {
-		return lmcz.NewCzClient(cfg.LMCZ, newHTTPClient()).SetOutput(out).Init(ctx)
+		return lmcz.NewCzClient(cfg.LMCZ, newHTTPClient()).SetOutput(out).SetStepHandler(a.emitStep).Init(ctx)
 	})
 }
 

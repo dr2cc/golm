@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 
+	"github.com/dr2cc/golm/internal/report"
 	"github.com/dr2cc/golm/internal/scanner"
 	"github.com/dr2cc/golm/internal/util/urlutil"
 )
@@ -18,12 +19,17 @@ import (
 // повторно сканировать подсеть. Теперь Status — это две независимые части:
 // resolveHostPort (найти адрес) + statusAt (спросить статус по готовому адресу).
 // Для внешнего кода (CLI, GUI) Status ведет себя точно так же, как раньше.
+//
+// [GUI-статусы] Части вызываются через обертки findServer / queryStatus (steps.go),
+// которые дополнительно сообщают GUI итог каждого шага. Результат и ошибки — прежние.
 func (c *CzClient) Status(ctx context.Context) (CheckResult, error) {
-	hostPort, err := c.resolveHostPort()
+	steps := report.NewTracker(c.onStep, stepFind, stepStatus)
+
+	hostPort, err := c.findServer(steps)
 	if err != nil {
 		return CheckResult{}, err
 	}
-	return c.statusAt(ctx, hostPort)
+	return c.queryStatus(ctx, steps, hostPort)
 }
 
 // [GUI-рефакторинг] resolveHostPort — бывшее начало метода Status, вынесено без изменений логики.
