@@ -1,31 +1,31 @@
 env: "development"
-
 # Флаги запуска модулей по умолчанию (флаги CLI могут их переопределить)
 launch_datamobile: false
 launch_lmcz_check: false
 launch_lmcz_init: false
-client_request_timeout: "10s"   # Будет автоматически распарсено в time.Duration
-
+client_request_timeout: "10s" # Будет автоматически распарсено в time.Duration
 datamobile:
-  user: "tur"
-  pass: "q73wert89y"
-
+  user: "admin"
+  pass: ""
 apache:
-  publication_name: "tradeProfil11"
+  publication_name: "polyMark"
   # tradeProfilDm / polyMark
-  address: "192.168.0.75"
+
+  address: "localhost"
   # 192.168.0.75 / localhost
+
   port: ""
   conf_path: C:/Apache24/conf/httpd.conf
   # ssh drk@192.168.0.75 cd /etc/apache2/ apache2.conf // Путь к конфигурационному файлу Apache (для Windows или Linux)
-  warning_duration: "2s"
 
+  warning_duration: "2s"
 lmcz:
   # Схемы не нужны!
-  host: "localhost"
+  host: "192.168.4.220"
   # "localhost" "sidingkas"
-  subnet: "192.168.0"
-  port: "5998"
+
+  subnet: "192.168.4"
+  port: "5995"
   scanner_timeout: "500ms"
   user: "admin"
   pass: "admin"

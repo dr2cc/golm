@@ -15,6 +15,7 @@
   (`internal/report`), GUI только отображает то, что пришло событием `step`.
 
 `config.yaml` ищется в таком порядке:
+
 1. путь из переменной окружения `GOLM_CONFIG`;
 2. рядом с `golm-gui.exe`;
 3. в текущей папке.
@@ -23,11 +24,12 @@
 
 ## Разработка
 
-Нужны Go 1.26+, Node.js 20+ и Wails CLI:
+Нужны Go 1.26+, Node.js v20.12.0+ и Wails CLI:
 
 ```sh
 go install github.com/wailsapp/wails/v2/cmd/wails@latest
 wails doctor   # проверит, что всё установлено (на Windows нужен WebView2 — в Windows 10/11 он уже есть)
+node -v		   # выведет версию Node.js
 ```
 
 Запуск с горячей перезагрузкой интерфейса (из папки `gui/`):

@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "ignoreDeprecations": "6.0", // dr2cc
     "moduleResolution": "Node",
     "target": "ESNext",
     "module": "ESNext",
@@ -8,7 +9,8 @@
      * a value or a type, so tell TypeScript to enforce using
      * `import type` instead of `import` for Types.
      */
-    "importsNotUsedAsValues": "error",
+    // "importsNotUsedAsValues": "error", // dr2cc
+    "verbatimModuleSyntax": true,
     "isolatedModules": true,
     "resolveJsonModule": true,
     /**
