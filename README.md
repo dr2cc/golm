@@ -140,38 +140,65 @@ func (a *App) LmczVersion() (string, error) {
 
 ```
 golm/
-├── config.example.yaml   # Шаблон настроек (скопировать в config.yaml)
-├── config.yaml           # Ваши настройки (в .gitignore, в репозиторий не попадает)
-├── gui/                  # Оконная версия (Wails + Svelte), отдельный Go-модуль
+├── config.example.yaml       # Шаблон настроек (скопировать в config.yaml)
+├── config.yaml               # Ваши настройки (в .gitignore, в репозиторий не попадает)
+├── go.mod                    # Модуль github.com/dr2cc/golm (CLI и общая логика)
 │
 ├── cmd/
 │   └── golm/
-│       └── main.go       # Вызывает app.Run()
+│       └── main.go           # Точка входа CLI: config.New() → app.Run()
+│
 ├── internal/
 │   ├── app/
-│   │   └── app.go        # Инициализирует клиенты и запускает логику (Run)
+│   │   └── app.go            # CLI: по флагам выбирает и запускает нужный клиент
 │   │
 │   ├── config/
-│   │   └── config.go     # Парсинг конфигурации
+│   │   ├── config.go         # Load (чтение YAML), New (Load + флаги CLI), Save (с сохранением комментариев)
+│   │   └── config_test.go
 │   │
-│   │── datamobile/       # Область ответственности: DataMobile-Apache-1C
-│   │   ├── client.go     # Логика запросов, методы (например, GetProducts)
-│   │   └── models.go     # Структуры данных (DTO) для этого сервиса
+│   ├── datamobile/           # Область ответственности: DataMobile-Apache-1C
+│   │   ├── client.go         # DmClient: Basic Auth через RoundTripper, SetOutput, SetStepHandler
+│   │   ├── diagnostics.go    # Шаги проверки: Apache → модуль 1С в httpd.conf → сервис DataMobileExch
+│   │   └── models.go         # Структуры ответов (DTO)
 │   │
-│   ├── lmcz/             # Область ответственности: ЛМ ЧЗ
-│   │   ├── client.go     # Логика запросов к ЧЗ
-│   │   └── models.go     # Структуры данных для ЧЗ
+│   ├── lmcz/                 # Область ответственности: ЛМ ЧЗ
+│   │   ├── client.go         # CzClient: SetOutput, SetStepHandler
+│   │   ├── status.go         # Status: поиск сервера + GET /api/v2/status
+│   │   ├── init.go           # Init: проверка статуса + POST /api/v2/init (токен)
+│   │   ├── steps.go          # Шаги «Поиск сервера», «Статус сервера», «Отправка токена» для GUI
+│   │   └── models.go         # Структуры запросов и ответов (DTO)
+│   │
+│   ├── report/
+│   │   ├── report.go         # Step, State, Tracker — статусы шагов (в CLI ничего не делают)
+│   │   └── report_test.go
 │   │
 │   ├── scanner/
-│   │   └── scanner.go    # Вспомогательный сканер (находит IP)
+│   │   └── scanner.go        # Сканер подсети /24: находит хост с открытым портом
 │   │
-│   └── transport/        # (Опционально) Общий HTTP-клиент, если нужен
-│       └── http.go       # Настройки таймаутов, логирования, retry-логики
-
-    ├── client/
-    │   ├── client.go     # Функция Run(), конструктор NewClient() и общая структура
-    │   ├── server.go     # Эндпоинт получения информации о сервере
-    │   └── regLm.go      # Эндпоинт регистрации ЛМ ЧЗ
-    │
-
+│   ├── cmdutil/
+│   │   └── factory.go        # Фабрика общих зависимостей (HTTP-клиент)
+│   │
+│   └── util/
+│       └── urlutil/
+│           └── urlutil.go    # JoinHostPort: очистка схемы и склейка хоста с портом
+│
+└── gui/                      # Оконная версия (Wails + Svelte), отдельный модуль github.com/dr2cc/golm/gui
+    ├── go.mod                # replace github.com/dr2cc/golm => ../
+    ├── wails.json            # Настройки сборки Wails
+    ├── main.go               # Запуск окна, встраивание frontend/dist в exe
+    ├── app.go                # Методы для JS: LoadSettings, SaveSettings, CheckDataMobile, LmczStatus, LmczInit
+    ├── logwriter.go          # io.Writer: режет вывод клиентов на строки → событие "log"
+    ├── app_test.go           # Тесты на локальных HTTP-серверах вместо Apache/1С и ЛМ ЧЗ
+    ├── build/                # Иконки (appicon.png, windows/icon.ico), манифест, установщик; bin/ — результат сборки
+    └── frontend/
+        ├── src/
+        │   ├── App.svelte        # Вкладки, кнопки, статусы шагов, лог
+        │   ├── Settings.svelte   # Форма config.yaml
+        │   ├── main.js
+        │   └── style.css
+        ├── wailsjs/          # Генерируется Wails (JS-обертки над методами App), руками не правим
+        ├── dist/             # Собранный фронтенд (в git только .gitkeep)
+        ├── index.html
+        ├── package.json
+        └── vite.config.js
 ```
