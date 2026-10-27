@@ -1,9 +1,12 @@
 package datamobile
 
 import (
+	"io"
 	"net/http"
+	"os"
 
 	"github.com/dr2cc/golm/internal/config"
+	"github.com/dr2cc/golm/internal/report"
 )
 
 // ClientConfig содержит строго то, что нужно для HTTP-запросов
@@ -15,6 +18,15 @@ type ClientConfig struct {
 type DmClient struct {
 	httpClient *http.Client
 	cfg        ClientConfig
+
+	// [GUI-рефакторинг] out — куда диагностика пишет сообщения о ходе проверки.
+	// Раньше DiagnosticSuite печатал напрямую через fmt.Printf (всегда в консоль).
+	// Для CLI out == os.Stdout (вывод не изменился), GUI подставляет свой writer.
+	out io.Writer
+
+	// [GUI-статусы] onStep получает изменения состояния шагов диагностики.
+	// В CLI не задается (nil) — тогда шаги никуда не отправляются.
+	onStep report.Func
 }
 
 // The provided HTTP client will be mutated for use with Dm, so it should not
@@ -37,7 +49,22 @@ func NewDmClient(httpClient *http.Client, cfg ClientConfig) *DmClient {
 	return &DmClient{
 		httpClient: httpClient,
 		cfg:        cfg,
+		// [GUI-рефакторинг] По умолчанию — консоль, сигнатура конструктора не изменилась.
+		out: os.Stdout,
 	}
+}
+
+// [GUI-рефакторинг] SetOutput перенаправляет вывод диагностики (используется GUI).
+// Возвращает сам клиент, чтобы можно было писать цепочкой.
+func (c *DmClient) SetOutput(w io.Writer) *DmClient {
+	c.out = w
+	return c
+}
+
+// [GUI-статусы] SetStepHandler подключает получателя статусов шагов (используется GUI).
+func (c *DmClient) SetStepHandler(f report.Func) *DmClient {
+	c.onStep = f
+	return c
 }
 
 type dmTransport struct {

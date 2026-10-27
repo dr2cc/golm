@@ -1,0 +1,39 @@
+env: "development"
+
+# Пример конфигурации. Скопируйте этот файл в config.yaml и заполните своими значениями:
+#   cp config.example.yaml config.yaml      (Windows: copy config.example.yaml config.yaml)
+# config.yaml добавлен в .gitignore — логины, пароли и токен не попадут в репозиторий.
+
+# Флаги запуска модулей по умолчанию (флаги CLI могут их переопределить)
+launch_datamobile: false
+launch_lmcz_check: false
+launch_lmcz_init: false
+client_request_timeout: "10s"   # Будет автоматически распарсено в time.Duration
+
+datamobile:
+  # Пользователь 1С для HTTP-сервиса DataMobileExch
+  user: "user"
+  pass: ""
+
+apache:
+  publication_name: "tradeProfil11"
+  # Имя публикации базы, например tradeProfilDm / polyMark
+  address: "localhost"
+  # 192.168.0.75 / localhost
+  port: ""
+  # Пусто — порт 80
+  conf_path: C:/Apache24/conf/httpd.conf
+  # Путь к конфигурационному файлу Apache (для Windows или Linux, например /etc/apache2/apache2.conf)
+  warning_duration: "2s"
+
+lmcz:
+  # Схемы не нужны!
+  host: "localhost"
+  # Пусто — искать сервер сканированием подсети subnet
+  subnet: "192.168.0"
+  port: "5998"
+  scanner_timeout: "500ms"
+  user: "admin"
+  pass: ""
+  # Токен для инициализации ЛМ ЧЗ (POST /api/v2/init)
+  token_x_api_key: ""

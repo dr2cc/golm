@@ -1,0 +1,7 @@
+build/bin
+frontend/node_modules
+# Собранный фронтенд не храним в git, но сама папка нужна:
+# main.go встраивает ее через //go:embed, без нее не соберутся go vet / go test.
+frontend/dist/*
+!frontend/dist/.gitkeep
+frontend/package.json.md5

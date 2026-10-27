@@ -2,17 +2,31 @@ package scanner
 
 import (
 	"fmt"
+	"io"
 	"net"
+	"os"
 	"sync"
 	"time"
 )
 
 // ScanSubnet сканирует сеть и возвращает первый ответивший IP.
 // При этом сканирование всей сети всё равно гарантированно дорабатывает до конца.
+//
+// [GUI-рефакторинг] Оставлена для совместимости: просто вызывает ScanSubnetTo
+// с выводом в консоль (os.Stdout), то есть ведет себя как раньше.
 func ScanSubnet(subnet, port string, timeout time.Duration) string {
+	return ScanSubnetTo(os.Stdout, subnet, port, timeout)
+}
+
+// [GUI-рефакторинг] ScanSubnetTo — бывшее тело ScanSubnet с одним отличием:
+// сообщения пишутся не через fmt.Printf (всегда в консоль), а в переданный out.
+// Так GUI может показать ход сканирования в своем окне лога.
+// Важно: строки "[+] Открыт" пишутся из горутин, поэтому out должен быть
+// безопасен для одновременной записи (os.Stdout — безопасен, writer GUI — тоже).
+func ScanSubnetTo(out io.Writer, subnet, port string, timeout time.Duration) string {
 	var wg sync.WaitGroup
 
-	fmt.Printf("Запуск сканирования подсети %s.0/24 по порту %s...\n", subnet, port)
+	fmt.Fprintf(out, "Запуск сканирования подсети %s.0/24 по порту %s...\n", subnet, port)
 
 	sem := make(chan struct{}, 50)
 
@@ -37,7 +51,7 @@ func ScanSubnet(subnet, port string, timeout time.Duration) string {
 			}
 			conn.Close()
 
-			fmt.Printf("[+] Открыт: %s\n", addr)
+			fmt.Fprintf(out, "[+] Открыт: %s\n", addr)
 			foundChan <- addr // Отправляем адрес в канал
 		}(address)
 	}

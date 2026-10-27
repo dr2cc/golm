@@ -9,29 +9,56 @@ import (
 	"net/http"
 	"net/url"
 
+	"github.com/dr2cc/golm/internal/report"
 	"github.com/dr2cc/golm/internal/scanner"
 	"github.com/dr2cc/golm/internal/util/urlutil"
 )
 
+// [GUI-рефакторинг] Раньше Status сам и искал адрес сервера, и делал запрос.
+// Из-за этого Init (которому адрес нужен еще раз для отправки токена) был вынужден
+// повторно сканировать подсеть. Теперь Status — это две независимые части:
+// resolveHostPort (найти адрес) + statusAt (спросить статус по готовому адресу).
+// Для внешнего кода (CLI, GUI) Status ведет себя точно так же, как раньше.
+//
+// [GUI-статусы] Части вызываются через обертки findServer / queryStatus (steps.go),
+// которые дополнительно сообщают GUI итог каждого шага. Результат и ошибки — прежние.
 func (c *CzClient) Status(ctx context.Context) (CheckResult, error) {
+	steps := report.NewTracker(c.onStep, stepFind, stepStatus)
+
+	hostPort, err := c.findServer(steps)
+	if err != nil {
+		return CheckResult{}, err
+	}
+	return c.queryStatus(ctx, steps, hostPort)
+}
+
+// [GUI-рефакторинг] resolveHostPort — бывшее начало метода Status, вынесено без изменений логики.
+// Возвращает "host:port" сервера ЛМ ЧЗ: либо из конфига, либо найденный сканером подсети.
+func (c *CzClient) resolveHostPort() (string, error) {
 	var hostPort string
 
 	if c.cfg.Host == "" {
 		// Находим компьютеры с портом сервиса ЛМ ЧЗ и получаем первый результат
-		hostPort = scanner.ScanSubnet(c.cfg.Subnet, c.cfg.Port, c.cfg.ScannerTimeout)
+		// [GUI-рефакторинг] Сканер теперь пишет в c.out, а не всегда в консоль.
+		hostPort = scanner.ScanSubnetTo(c.out, c.cfg.Subnet, c.cfg.Port, c.cfg.ScannerTimeout)
 	} else {
 		// Очищаем хост от схемы
 		hostPort = urlutil.JoinHostPort(c.cfg.Host, c.cfg.Port)
 	}
 
 	if hostPort == "" {
-		return CheckResult{}, fmt.Errorf("хостов с открытым портом %s не найдено", c.cfg.Port)
+		return "", fmt.Errorf("хостов с открытым портом %s не найдено", c.cfg.Port)
 	}
+	return hostPort, nil
+}
 
+// [GUI-рефакторинг] statusAt — бывшее продолжение метода Status: запрос GET /status
+// по уже известному адресу. Код ниже не менялся, кроме замены fmt.Printf на fmt.Fprintf(c.out, ...).
+func (c *CzClient) statusAt(ctx context.Context, hostPort string) (CheckResult, error) {
 	// Добавляем схему
 	finalURL := fmt.Sprintf("http://%s/api/v2/status", hostPort)
 
-	fmt.Printf("Проверяем статус ЛМ ЧЗ по адресу: %s\n", finalURL)
+	fmt.Fprintf(c.out, "Проверяем статус ЛМ ЧЗ по адресу: %s\n", finalURL)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, finalURL, nil)
 	if err != nil {

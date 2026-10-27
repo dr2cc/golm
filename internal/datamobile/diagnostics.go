@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/dr2cc/golm/internal/config"
+	"github.com/dr2cc/golm/internal/report"
 )
 
 // DiagnosticSuite через свои методы управляет набором проверок
@@ -27,7 +28,20 @@ type DiagnosticSuite struct {
 	apacheCfg     config.ApacheConfig
 	dataMobileCfg config.DataMobileConfig
 	client        *DmClient
+
+	// [GUI-статусы] Результаты шагов, нужные для пояснений в статусах.
+	// Заполняются по ходу проверки; на консольный вывод не влияют.
+	apacheStatus int           // HTTP-код ответа Apache (pingApache)
+	exchDuration time.Duration // время ответа сервиса DataMobileExch (checkDataMobileExch)
 }
+
+// [GUI-статусы] Идентификаторы шагов диагностики DataMobile — по ним GUI
+// обновляет нужную строку в списке шагов.
+const (
+	StepApache   = "apache"
+	StepModule1C = "module1c"
+	StepExchange = "exchange"
+)
 
 // Главный смысл этого конструктора- создание экземпляра DiagnosticSuite с его методами.
 // В конструктор передаем только то, что реально нужно для диагностики.
@@ -48,36 +62,91 @@ func (c *DmClient) Check(ctx context.Context) error {
 }
 
 // Run — координатор
+//
+// [GUI-статусы] Логика и порядок проверок не изменились. Добавлено только
+// оповещение о шагах через Tracker: «начат» перед шагом, «успех / замечание / ошибка»
+// после него, «пропущен» для шагов, до которых дело не дошло.
+// В CLI ds.client.onStep == nil, и все вызовы steps.* ничего не делают.
 func (ds *DiagnosticSuite) Run(ctx context.Context) error {
+	steps := report.NewTracker(ds.client.onStep,
+		report.Step{ID: StepApache, Title: "Apache отвечает"},
+		report.Step{ID: StepModule1C, Title: "Модуль 1С в httpd.conf"},
+		report.Step{ID: StepExchange, Title: "Сервис DataMobileExch"},
+	)
+
 	// 1. Проверяем Apache
+	steps.Start(StepApache)
 	isAlive, err := ds.pingApache(ctx)
 	if err != nil {
+		steps.Done(StepApache, report.Fail, oneLine(err))
+		steps.SkipRest("не выполнялся: Apache недоступен")
 		return fmt.Errorf("Connection failure! %w", err)
 	}
 
 	// Если статус некорректный (например, 5xx), завершаем проверку досрочно без ошибки.
 	// Apache ответил, но глубокая диагностика сейчас невозможна.
 	if !isAlive {
+		// [GUI-статусы] Для CLI это по-прежнему не ошибка (код выхода 0),
+		// но в списке шагов честно показываем, что Apache ответил ошибкой.
+		steps.Done(StepApache, report.Fail, fmt.Sprintf("Apache ответил ошибкой %d", ds.apacheStatus))
+		steps.SkipRest("не выполнялся: Apache отвечает ошибкой")
 		return nil
 	}
+	steps.Done(StepApache, report.OK, ds.apacheCfg.BaseURL())
 
 	// 2. Цепочка последующих проверок. Реализуем паттерн пайплайна (последовательности шагов).
-	// Создаём и инициализируем слайс именованных функций.
-	subSteps := []func(ctx context.Context) error{
-		// Каждый элемент слайса — это функция, которая:
+	// Создаём и инициализируем слайс шагов.
+	//
+	// [GUI-статусы] Раньше это был слайс функций []func(ctx) error. Теперь у каждого шага
+	// есть еще id (какую строку обновлять в GUI) и result — как описать успешный итог шага.
+	subSteps := []struct {
+		id string
+		// Функция, которая:
 		// - Принимает один аргумент — контекст выполнения (ctx типа context.Context).
 		// - Возвращает одно значение — ошибку (error)
-		ds.checkLocalApache1C,
-		ds.checkDataMobileExch,
+		run func(ctx context.Context) error
+		// Состояние и пояснение для шага, если run вернул nil
+		result func() (report.State, string)
+	}{
+		{StepModule1C, ds.checkLocalApache1C, ds.module1CResult},
+		{StepExchange, ds.checkDataMobileExch, ds.exchangeResult},
 	}
 
 	for _, step := range subSteps {
-		if err := step(ctx); err != nil {
+		steps.Start(step.id)
+		if err := step.run(ctx); err != nil {
+			steps.Done(step.id, report.Fail, oneLine(err))
+			steps.SkipRest("не выполнялся: ошибка на предыдущем шаге")
 			return err // Прерываемся при первой ошибке во вложенных шагах
 		}
+		state, detail := step.result()
+		steps.Done(step.id, state, detail)
 	}
 
 	return nil
+}
+
+// [GUI-статусы] Итог шага «Модуль 1С»: проверка httpd.conf выполняется только для локального Apache.
+func (ds *DiagnosticSuite) module1CResult() (report.State, string) {
+	if !ds.isLocalApache() {
+		return report.Skipped, "не требуется: Apache не локальный"
+	}
+	return report.OK, "модуль подключен"
+}
+
+// [GUI-статусы] Итог шага «Сервис DataMobileExch»: замечание, если ответ медленнее порога.
+func (ds *DiagnosticSuite) exchangeResult() (report.State, string) {
+	d := ds.exchDuration.Round(time.Millisecond)
+	if ds.exchDuration > ds.apacheCfg.WarningDuration {
+		return report.Warn, fmt.Sprintf("ответ за %v — медленнее порога %v", d, ds.apacheCfg.WarningDuration)
+	}
+	return report.OK, fmt.Sprintf("ответ за %v", d)
+}
+
+// [GUI-статусы] oneLine убирает переводы строк из текста ошибки,
+// чтобы он помещался в строку статуса (полный текст остается в логе).
+func oneLine(err error) string {
+	return strings.Join(strings.Fields(err.Error()), " ")
 }
 
 // pingApache возвращает
@@ -120,14 +189,20 @@ func (ds *DiagnosticSuite) pingApache(ctx context.Context) (bool, error) {
 	}
 	defer resp.Body.Close()
 
+	// [GUI-статусы] Запоминаем код ответа для пояснения в статусе шага
+	ds.apacheStatus = resp.StatusCode
+
 	// Проверяем корректность статуса (200-499)
 	if resp.StatusCode >= 200 && resp.StatusCode < 500 {
 		serverHeader := resp.Header.Get("Server")
-		fmt.Printf("- It just works! %s - %s\n", ds.apacheCfg.BaseURL(), serverHeader)
+		// [GUI-рефакторинг] Во всем файле fmt.Printf/Println заменены на
+		// fmt.Fprintf/Fprintln(ds.client.out, ...): текст сообщений тот же,
+		// но теперь его можно направить не только в консоль, но и в окно GUI.
+		fmt.Fprintf(ds.client.out, "- It just works! %s - %s\n", ds.apacheCfg.BaseURL(), serverHeader)
 		return true, nil // Разрешаем дальнейшие проверки
 	}
 
-	fmt.Printf("- Apache responded with server error status: %d\n", resp.StatusCode)
+	fmt.Fprintf(ds.client.out, "- Apache responded with server error status: %d\n", resp.StatusCode)
 	return false, nil // Запрещаем дальнейшие проверки, но это не критическая ошибка самой диагностики
 }
 
@@ -150,21 +225,38 @@ func isWindowsConnRefused(err error) bool {
 }
 
 func (ds *DiagnosticSuite) checkLocalApache1C(ctx context.Context) error {
-	// Коротко и понятно, откуда берутся данные
-	addr := ds.apacheCfg.BaseURL()
-
-	if !strings.Contains(addr, "127.0.0.1") && !strings.Contains(addr, "localhost") {
+	// [GUI-статусы] Условие «Apache локальный» вынесено в isLocalApache(),
+	// потому что его же использует module1CResult(). Логика не изменилась.
+	if !ds.isLocalApache() {
 		return nil
 	}
 
-	if err := ShowApache1CModule(ds.apacheCfg.ConfPath); err != nil {
+	// [GUI-рефакторинг] Вызываем вариант с явным выводом, чтобы строка о модуле 1С
+	// попала туда же, куда и остальной лог диагностики (консоль или окно GUI).
+	if err := ShowApache1CModuleTo(ds.client.out, ds.apacheCfg.ConfPath); err != nil {
 		return fmt.Errorf("local apache config module error: %w", err)
 	}
 	return nil
 }
 
+// isLocalApache — Apache запущен на этом же компьютере (тогда можно прочитать его httpd.conf).
+func (ds *DiagnosticSuite) isLocalApache() bool {
+	// Коротко и понятно, откуда берутся данные
+	addr := ds.apacheCfg.BaseURL()
+
+	return strings.Contains(addr, "127.0.0.1") || strings.Contains(addr, "localhost")
+}
+
 // Функция чтения версии модуля 1С из локального Apache
+//
+// [GUI-рефакторинг] Оставлена для совместимости: печатает в консоль, как раньше.
 func ShowApache1CModule(configPath string) error {
+	return ShowApache1CModuleTo(os.Stdout, configPath)
+}
+
+// [GUI-рефакторинг] ShowApache1CModuleTo — бывшее тело ShowApache1CModule,
+// но найденная строка пишется в переданный out вместо fmt.Printf.
+func ShowApache1CModuleTo(out io.Writer, configPath string) error {
 	file, err := os.Open(configPath)
 	if err != nil {
 		return fmt.Errorf("- apache error: failed to open httpd.conf: %w", err)
@@ -177,7 +269,7 @@ func ShowApache1CModule(configPath string) error {
 	for scanner.Scan() {
 		line := scanner.Text()
 		if strings.Contains(line, "_1cws_module") && strings.Contains(line, "LoadModule") {
-			fmt.Printf("- Модуль 1С в конфигурации Apache:%s\n", strings.TrimSpace(line))
+			fmt.Fprintf(out, "- Модуль 1С в конфигурации Apache:%s\n", strings.TrimSpace(line))
 			found = true
 			break
 		}
@@ -197,7 +289,7 @@ func ShowApache1CModule(configPath string) error {
 // checkDataMobileExch — функция проверки доступности и скорости RESTful-сервиса DataMobileExch
 func (ds *DiagnosticSuite) checkDataMobileExch(ctx context.Context) error {
 	targetURL := ds.apacheCfg.BaseURL() + "/" + ds.apacheCfg.PublicationName + "/hs/DataMobileExch/"
-	fmt.Printf("\n- GET to endpoint (DataMobile): %s\n", targetURL)
+	fmt.Fprintf(ds.client.out, "\n- GET to endpoint (DataMobile): %s\n", targetURL)
 
 	// Время до создания запроса (чтобы замер отклика был точным)
 	startTime := time.Now()
@@ -221,13 +313,15 @@ func (ds *DiagnosticSuite) checkDataMobileExch(ctx context.Context) error {
 	defer resp.Body.Close()
 
 	duration := time.Since(startTime)
+	// [GUI-статусы] Запоминаем время ответа для пояснения в статусе шага
+	ds.exchDuration = duration
 
 	// Выводим скорость работы (тормоза) независимо от статуса, так как замер уже сделан
-	fmt.Printf("-- Время ответа сервера: %v", duration)
+	fmt.Fprintf(ds.client.out, "-- Время ответа сервера: %v", duration)
 	if duration > ds.apacheCfg.WarningDuration {
-		fmt.Printf(" Сервер сильно тормозит! Превышен лимит в %v\n", ds.apacheCfg.WarningDuration)
+		fmt.Fprintf(ds.client.out, " Сервер сильно тормозит! Превышен лимит в %v\n", ds.apacheCfg.WarningDuration)
 	} else {
-		fmt.Printf(" Скорость работы в норме\n")
+		fmt.Fprintf(ds.client.out, " Скорость работы в норме\n")
 	}
 
 	// ОБРАБОТКА ОШИБОК: Если HTTP статус-код НЕ 200 OK
@@ -237,28 +331,28 @@ func (ds *DiagnosticSuite) checkDataMobileExch(ctx context.Context) error {
 			bodyBytes, _ := io.ReadAll(resp.Body)
 			bodyStr := string(bodyBytes)
 
-			fmt.Println("-- status", resp.StatusCode, "Конфликт версий 1С:")
+			fmt.Fprintln(ds.client.out, "-- status", resp.StatusCode, "Конфликт версий 1С:")
 
 			re := regexp.MustCompile(`\((\d+\.\d+\.\d+\.\d+)\s*-\s*(\d+\.\d+\.\d+\.\d+)\)`)
 			matches := re.FindStringSubmatch(bodyStr)
 
 			if len(matches) == 3 {
-				fmt.Printf("--- Версия wsap24: %s\n", matches[1])
-				fmt.Printf("--- Кластер    1С: %s\n", matches[2])
-				fmt.Println("-- Перепубликуйте базу или обновите путь к wsap24-модулю in httpd.conf.")
+				fmt.Fprintf(ds.client.out, "--- Версия wsap24: %s\n", matches[1])
+				fmt.Fprintf(ds.client.out, "--- Кластер    1С: %s\n", matches[2])
+				fmt.Fprintln(ds.client.out, "-- Перепубликуйте базу или обновите путь к wsap24-модулю in httpd.conf.")
 			} else {
-				fmt.Printf("   Технические детали:\n%s\n", bodyStr)
+				fmt.Fprintf(ds.client.out, "   Технические детали:\n%s\n", bodyStr)
 			}
 			return fmt.Errorf("1C version conflict (HTTP 409)")
 		}
 
 		// Другие ошибки (401, 404, 500 и т.д.)
-		fmt.Printf("-- service error: status %d\n", resp.StatusCode)
+		fmt.Fprintf(ds.client.out, "-- service error: status %d\n", resp.StatusCode)
 		if resp.StatusCode == http.StatusNotFound {
-			fmt.Printf("--- База %s не опубликована на %s\n", ds.apacheCfg.PublicationName, ds.apacheCfg.BaseURL())
+			fmt.Fprintf(ds.client.out, "--- База %s не опубликована на %s\n", ds.apacheCfg.PublicationName, ds.apacheCfg.BaseURL())
 		}
 		if resp.StatusCode == http.StatusUnauthorized {
-			fmt.Println("--- Неверный логин или пароль пользователя 1С.")
+			fmt.Fprintln(ds.client.out, "--- Неверный логин или пароль пользователя 1С.")
 		}
 
 		// ВАЖНО: Возвращаем ошибку здесь, чтобы код не шел дальше пытаться парсить возвращаемый 1С HTML как JSON
@@ -274,7 +368,7 @@ func (ds *DiagnosticSuite) checkDataMobileExch(ctx context.Context) error {
 	}
 
 	// Выводим статус, который прислал hs DataMobile
-	fmt.Printf("-- data: %s\n", strings.TrimSpace(result.Data))
+	fmt.Fprintf(ds.client.out, "-- data: %s\n", strings.TrimSpace(result.Data))
 
 	return nil
 }
