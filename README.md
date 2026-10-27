@@ -38,6 +38,104 @@ cd gui
 wails build -platform windows/amd64   # → gui/build/bin/golm-gui.exe
 ```
 
+## Разработка
+
+Логика проверок живет в `internal/*` и общая для CLI и GUI: изменение в ней сразу работает в обоих.
+
+```
+internal/datamobile, internal/lmcz, ...  ← логика проверок (общая)
+internal/config                          ← config.yaml: Load / Save / New (+ флаги CLI)
+internal/report                          ← шаги и их статусы для GUI
+cmd/golm + internal/app                  ← CLI: флаги → вызов клиента
+gui/app.go                               ← GUI: кнопка → вызов того же клиента
+```
+
+`gui/` — отдельный Go-модуль. Он подключает основной через `replace github.com/dr2cc/golm => ../`,
+поэтому правки в `internal/*` видны в GUI сразу, без публикации и смены версий.
+
+### Каждый день
+
+```sh
+# CLI (из корня, config.yaml лежит в корне)
+go run ./cmd/golm -dm
+go vet ./... && go test ./...
+
+# GUI с автоперезапуском: wails dev следит и за .go, и за .svelte
+cd gui
+GOLM_CONFIG=../config.yaml wails dev            # bash
+$env:GOLM_CONFIG="..\config.yaml"; wails dev    # PowerShell
+go test ./...
+```
+
+`wails dev` при изменении Go пересобирает приложение и заново генерирует `gui/frontend/wailsjs`
+(JS-обертки над методами `App`) — руками их не правим.
+
+VS Code с расширением Go видит оба модуля, если открыть корень репозитория. `go.work` создавать не нужно:
+с ним `go build ./...` в корне начнет собирать и GUI, а под Linux/WSL для этого нужны GTK/WebKit.
+
+### Правила для кода в `internal/*`
+
+1. **Никакого `fmt.Printf` / `fmt.Println`** — только `fmt.Fprintf(c.out, ...)`. Иначе строка появится в консоли CLI, но не в окне лога GUI.
+2. **Никаких `log.Fatal`, `os.Exit`, `flag.*`** — они закроют окно GUI. Ошибку возвращаем (`return err`), решение о выходе принимает `cmd/golm`.
+3. **Ошибку возвращать, а не только печатать** — по ней GUI ставит ✗.
+4. **Новое поле в конфиге** добавляется:
+   - в структуру `internal/config/config.go`;
+   - в `config.example.yaml`;
+   - если поле должно редактироваться в GUI — в `Settings` и `LoadSettings` / `SaveSettings` (`gui/app.go`) и в список `groups` в `gui/frontend/src/Settings.svelte`.
+
+### Как добавить новую проверку
+
+Пример — новый эндпоинт ЛМ ЧЗ.
+
+**1. Логика** в `internal/lmcz`:
+
+```go
+func (c *CzClient) Version(ctx context.Context) (string, error) {
+	steps := report.NewTracker(c.onStep, stepFind, report.Step{ID: "version", Title: "Версия сервера"})
+
+	hostPort, err := c.findServer(steps) // готовый шаг «Поиск сервера»
+	if err != nil {
+		return "", err
+	}
+
+	steps.Start("version")
+	fmt.Fprintf(c.out, "Запрашиваем версию: %s\n", hostPort) // в консоль или в окно GUI
+	v, err := c.getVersion(ctx, hostPort)                    // обычный HTTP-запрос
+	if err != nil {
+		steps.Done("version", report.Fail, err.Error())
+		return "", err
+	}
+	steps.Done("version", report.OK, v)
+	return v, nil
+}
+```
+
+Если статусы по шагам не нужны, `Tracker` можно не использовать: в GUI будут лог и общий итог.
+
+**2. CLI** — флаг в `config.New()` (`flag.BoolVar(&cfg.LaunchLmczVersion, "version", ...)`)
+и ветка `if cfg.LaunchLmczVersion { ... }` в `internal/app/app.go`.
+
+**3. GUI** — метод в `gui/app.go`:
+
+```go
+func (a *App) LmczVersion() (string, error) {
+	var v string
+	err := a.run("Запрос версии ЛМ ЧЗ...", func(ctx context.Context, cfg *config.Config, out *lineWriter) error {
+		var err error
+		v, err = lmcz.NewCzClient(cfg.LMCZ, newHTTPClient()).SetOutput(out).SetStepHandler(a.emitStep).Version(ctx)
+		return err
+	})
+	return v, err
+}
+```
+
+и кнопка в `gui/frontend/src/App.svelte`: `exec('version', LmczVersion, (v) => v)`, а рядом
+`{@render result('version')}` и `{@render stepList('version')}`. Функцию `LmczVersion` импортируем
+из `../wailsjs/go/main/App.js` — ее сгенерирует `wails dev`.
+
+**4. Тесты** — сервер подменяется `httptest.NewServer`, по образцу `TestLmczStatusAndInit` в `gui/app_test.go`.
+Так проверяются сразу логика, строки лога и статусы шагов: `requireSteps(t, rec, "find=ok version=ok")`.
+
 ## Структура проекта
 
 ```
