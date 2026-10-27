@@ -16,6 +16,12 @@
 
 ## Запуск
 
+Сначала создайте свой `config.yaml` из шаблона и заполните его. Файл в `.gitignore`, поэтому логины, пароли и токен в репозиторий не попадут:
+
+```sh
+cp config.example.yaml config.yaml      # Windows: copy config.example.yaml config.yaml
+```
+
 ```sh
 go run ./cmd/golm -dm
 go run ./cmd/golm -status
@@ -36,7 +42,8 @@ wails build -platform windows/amd64   # → gui/build/bin/golm-gui.exe
 
 ```
 golm/
-├── config.yaml           # Файл с настройками
+├── config.example.yaml   # Шаблон настроек (скопировать в config.yaml)
+├── config.yaml           # Ваши настройки (в .gitignore, в репозиторий не попадает)
 ├── gui/                  # Оконная версия (Wails + Svelte), отдельный Go-модуль
 │
 ├── cmd/

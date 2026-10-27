@@ -49,7 +49,8 @@ wails build                            # под текущую ОС
 wails build -platform windows/amd64    # exe для Windows (собирается и из Linux/WSL)
 ```
 
-Результат — `gui/build/bin/golm-gui.exe`, один файл. Рядом с ним нужно положить `config.yaml`.
+Результат — `gui/build/bin/golm-gui.exe`, один файл. Рядом с ним нужно положить `config.yaml`
+(его можно сделать из `config.example.yaml` или создать кнопкой «Сохранить» на вкладке «Настройки»).
 
 ## Тесты
 
