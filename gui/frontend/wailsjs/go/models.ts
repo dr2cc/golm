@@ -74,6 +74,7 @@ export namespace main {
 	}
 	export class Settings {
 	    configPath: string;
+	    configSaved: boolean;
 	    clientRequestTimeout: string;
 	    apache: ApacheSettings;
 	    datamobile: DataMobileSettings;
@@ -86,6 +87,7 @@ export namespace main {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.configPath = source["configPath"];
+	        this.configSaved = source["configSaved"];
 	        this.clientRequestTimeout = source["clientRequestTimeout"];
 	        this.apache = this.convertValues(source["apache"], ApacheSettings);
 	        this.datamobile = this.convertValues(source["datamobile"], DataMobileSettings);

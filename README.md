@@ -33,6 +33,10 @@ go run ./cmd/golm -token
 В папке [`gui/`](gui/README.md) лежит оконная версия на Wails + Svelte с теми же проверками и редактором `config.yaml`.
 Консольная утилита от GUI не зависит и собирается как раньше.
 
+`golm-gui.exe` не требует `config.yaml`: значения по умолчанию встроены в программу,
+а свои настройки сохраняются в `%APPDATA%\golm\config.yaml` (или в `config.yaml` рядом с exe, если он там лежит).
+CLI по-прежнему читает `config.yaml` из текущей папки.
+
 ```sh
 cd gui
 wails build -platform windows/amd64   # → gui/build/bin/golm-gui.exe
@@ -80,7 +84,7 @@ VS Code с расширением Go видит оба модуля, если о
 3. **Ошибку возвращать, а не только печатать** — по ней GUI ставит ✗.
 4. **Новое поле в конфиге** добавляется:
    - в структуру `internal/config/config.go`;
-   - в `config.example.yaml`;
+   - в `config.example.yaml` — он встроен в GUI как значения по умолчанию (`defaults.go`), поэтому значение по умолчанию задается там;
    - если поле должно редактироваться в GUI — в `Settings` и `LoadSettings` / `SaveSettings` (`gui/app.go`) и в список `groups` в `gui/frontend/src/Settings.svelte`.
 
 ### Как добавить новую проверку
@@ -143,6 +147,7 @@ golm/
 ├── config.example.yaml       # Шаблон настроек (скопировать в config.yaml)
 ├── config.yaml               # Ваши настройки (в .gitignore, в репозиторий не попадает)
 ├── go.mod                    # Модуль github.com/dr2cc/golm (CLI и общая логика)
+├── defaults.go               # Встраивает config.example.yaml в программу (настройки GUI по умолчанию)
 │
 ├── cmd/
 │   └── golm/
@@ -153,7 +158,7 @@ golm/
 │   │   └── app.go            # CLI: по флагам выбирает и запускает нужный клиент
 │   │
 │   ├── config/
-│   │   ├── config.go         # Load (чтение YAML), New (Load + флаги CLI), Save (с сохранением комментариев)
+│   │   ├── config.go         # Load / Parse (чтение YAML), New (Load + флаги CLI), Save (с сохранением комментариев)
 │   │   └── config_test.go
 │   │
 │   ├── datamobile/           # Область ответственности: DataMobile-Apache-1C
