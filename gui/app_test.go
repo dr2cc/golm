@@ -155,14 +155,92 @@ lmcz:
 	}
 }
 
+// [GUI-без-файла] Без файла форма получает значения из встроенного config.example.yaml.
 func TestLoadSettingsWithoutFile(t *testing.T) {
 	app, _ := testApp(t, "")
 	s, err := app.LoadSettings()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.LMCZ.Port != "5998" || s.ClientRequestTimeout != "10s" {
-		t.Errorf("ожидались значения по умолчанию: %+v", s)
+	if s.ConfigSaved {
+		t.Error("файла нет, а ConfigSaved = true")
+	}
+	if s.LMCZ.Port != "5998" || s.ClientRequestTimeout != "10s" || s.Apache.PublicationName != "tradeProfil11" {
+		t.Errorf("ожидались значения из config.example.yaml: %+v", s)
+	}
+}
+
+// [GUI-без-файла] Первое сохранение создает папку и файл на основе шаблона — с его комментариями.
+func TestFirstSaveCreatesFileFromTemplate(t *testing.T) {
+	app, _ := testApp(t, "")
+	app.configPath = filepath.Join(t.TempDir(), "AppData", "Roaming", "golm", "config.yaml")
+
+	s, err := app.LoadSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.LMCZ.Host = "192.168.4.220"
+	if err := app.SaveSettings(s); err != nil {
+		t.Fatal(err)
+	}
+
+	raw, err := os.ReadFile(app.configPath)
+	if err != nil {
+		t.Fatalf("файл не создан: %v", err)
+	}
+	for _, want := range []string{"# Схемы не нужны!", `host: "192.168.4.220"`, "launch_datamobile: false"} {
+		if !strings.Contains(string(raw), want) {
+			t.Errorf("в созданном файле нет %q:\n%s", want, raw)
+		}
+	}
+
+	s2, err := app.LoadSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !s2.ConfigSaved || s2.LMCZ.Host != "192.168.4.220" {
+		t.Errorf("после сохранения ожидался файл с новым хостом: %+v", s2)
+	}
+}
+
+// [GUI-без-файла] Проверка запускается и без файла — со значениями по умолчанию.
+func TestRunWithoutFileUsesDefaults(t *testing.T) {
+	app, rec := testApp(t, "")
+	app.LmczStatus() // localhost:5998 обычно закрыт — важна не удача запроса, а что он был сделан
+
+	requireLine(t, rec.lines, "используются значения по умолчанию")
+	requireLine(t, rec.lines, "Проверяем статус ЛМ ЧЗ по адресу: http://localhost:5998/api/v2/status")
+	for _, l := range rec.lines {
+		if strings.Contains(l, "файл конфигурации") {
+			t.Errorf("проверка не должна требовать файл: %q", l)
+		}
+	}
+}
+
+func TestResolveConfigPath(t *testing.T) {
+	exeDir := t.TempDir()
+	appData := filepath.Join(t.TempDir(), "Roaming")
+
+	// Нет ни переменной, ни файла рядом с exe — профиль пользователя
+	if got, want := resolveConfigPath("", exeDir, appData), filepath.Join(appData, "golm", "config.yaml"); got != want {
+		t.Errorf("профиль: got %q, want %q", got, want)
+	}
+
+	// Файл рядом с exe — портативный режим
+	portable := filepath.Join(exeDir, "config.yaml")
+	os.WriteFile(portable, []byte("env: x\n"), 0o600)
+	if got := resolveConfigPath("", exeDir, appData); got != portable {
+		t.Errorf("портативный: got %q, want %q", got, portable)
+	}
+
+	// GOLM_CONFIG важнее всего
+	if got := resolveConfigPath("/dev/golm.yaml", exeDir, appData); got != "/dev/golm.yaml" {
+		t.Errorf("GOLM_CONFIG: got %q", got)
+	}
+
+	// Папку профиля определить не удалось — рядом с exe
+	if got := resolveConfigPath("", t.TempDir(), ""); filepath.Base(got) != "config.yaml" {
+		t.Errorf("без профиля: got %q", got)
 	}
 }
 

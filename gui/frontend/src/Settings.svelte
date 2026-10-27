@@ -9,6 +9,8 @@
   let shown = $state({})        // какие секретные поля сейчас показаны открытым текстом
 
   const dirty = $derived(s !== null && JSON.stringify(s) !== saved)
+  // Файла настроек еще нет — показаны встроенные значения; сохранить можно и без правок
+  const canSave = $derived(dirty || (s !== null && !s.configSaved))
 
   // Описание формы: группа -> поля. path — путь к значению внутри Settings (см. gui/app.go).
   const groups = [
@@ -75,6 +77,7 @@
     message = null
     try {
       await SaveSettings($state.snapshot(s))
+      s.configSaved = true
       saved = JSON.stringify(s)
       message = { ok: true, text: 'Сохранено' }
     } catch (e) {
@@ -94,7 +97,14 @@
       save()
     }}
   >
-    <p class="path">Файл: <code>{s.configPath}</code></p>
+    <p class="path">
+      Файл: <code>{s.configPath}</code>
+      {#if !s.configSaved}
+        <br /><span class="notice">
+          Файл еще не создан — используются значения по умолчанию. «Сохранить» создаст его.
+        </span>
+      {/if}
+    </p>
 
     {#each groups as g}
       <fieldset>
@@ -126,7 +136,7 @@
     {/each}
 
     <div class="actions">
-      <button class="primary" type="submit" disabled={!dirty || saving}>Сохранить</button>
+      <button class="primary" type="submit" disabled={!canSave || saving}>Сохранить</button>
       <button type="button" onclick={load} disabled={saving}>Перечитать файл</button>
       {#if message}
         <span class:ok={message.ok} class:err={!message.ok}>{message.text}</span>
@@ -198,6 +208,10 @@
     bottom: 0;
     padding: 10px 0;
     background: var(--bg);
+  }
+
+  .notice {
+    color: var(--warn);
   }
 
   .ok {

@@ -104,18 +104,27 @@ func New() (*Config, error) {
 // без флагов командной строки и без печати предупреждений. Используется и CLI (через New),
 // и GUI (напрямую, с путем к config.yaml рядом с exe).
 func Load(filename string) (*Config, error) {
-	// 1. Инициализируем пустую структуру
-	cfg := &Config{}
-
 	// 2. Читаем файл конфигурации
 	fileBytes, err := os.ReadFile(filename)
 	if err != nil {
 		return nil, fmt.Errorf("не удалось прочитать файл конфигурации %s: %w", filename, err)
 	}
 
+	// 1, 3. Создаем структуру и парсим в нее YAML
+	// [GUI-без-файла] Этот код вынесен в Parse без изменений, чтобы GUI мог разобрать
+	// встроенный в exe шаблон настроек (config.example.yaml), а не только файл с диска.
+	return Parse(fileBytes)
+}
+
+// [GUI-без-файла] Parse — бывшие шаги 1 и 3 из Load: разбор YAML из памяти.
+// Ошибки те же, что и раньше, так что для CLI ничего не изменилось.
+func Parse(data []byte) (*Config, error) {
+	// 1. Инициализируем пустую структуру
+	cfg := &Config{}
+
 	// 3. Парсим YAML в структуру.
 	// Библиотека yaml.v3 превращает строки вида "10s" или "5m" в тип time.Duration
-	if err := yaml.Unmarshal(fileBytes, cfg); err != nil {
+	if err := yaml.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("ошибка парсинга YAML: %w", err)
 	}
 
