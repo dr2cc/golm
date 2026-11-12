@@ -21,7 +21,7 @@ import (
 )
 
 // App — мост между фронтендом и логикой golm.
-// Каждый публичный метод App Wails делает доступным из JS (frontend/wailsjs/go/main/App.js).
+// Каждый публичный метод структуры App, Wails делает доступным из JS (frontend/wailsjs/go/main/App.js).
 // Сама логика проверок не дублируется: вызываются те же клиенты, что и в CLI (internal/app).
 type App struct {
 	ctx        context.Context

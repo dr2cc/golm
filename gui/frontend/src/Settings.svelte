@@ -1,97 +1,147 @@
 <script>
-  import { onMount } from 'svelte'
-  import { LoadSettings, SaveSettings } from '../wailsjs/go/main/App.js'
+  import { onMount } from "svelte";
+  import { LoadSettings, SaveSettings } from "../wailsjs/go/main/App.js";
 
-  let s = $state(null)          // текущие значения формы
-  let saved = $state('')        // снимок последних загруженных/сохраненных значений (JSON)
-  let message = $state(null)    // { ok, text }
-  let saving = $state(false)
-  let shown = $state({})        // какие секретные поля сейчас показаны открытым текстом
+  let s = $state(null); // текущие значения формы
+  let saved = $state(""); // снимок последних загруженных/сохраненных значений (JSON)
+  let message = $state(null); // { ok, text }
+  let saving = $state(false);
+  let shown = $state({}); // какие секретные поля сейчас показаны открытым текстом
 
-  const dirty = $derived(s !== null && JSON.stringify(s) !== saved)
+  const dirty = $derived(s !== null && JSON.stringify(s) !== saved);
 
   // Описание формы: группа -> поля. path — путь к значению внутри Settings (см. gui/app.go).
   const groups = [
     {
-      title: 'Общие',
+      title: "Общие",
       fields: [
-        { path: 'clientRequestTimeout', label: 'Таймаут запроса', hint: 'Общий лимит на одну проверку, например 10s' },
+        {
+          path: "clientRequestTimeout",
+          label: "Таймаут запроса",
+          hint: "Общий лимит на одну проверку, например 10s",
+        },
       ],
     },
     {
-      title: 'Apache / 1С',
+      title: "Apache / 1С",
       fields: [
-        { path: 'apache.address', label: 'Адрес', hint: 'Например 192.168.0.75 или localhost' },
-        { path: 'apache.port', label: 'Порт', hint: 'Пусто — 80' },
-        { path: 'apache.publicationName', label: 'Имя публикации базы' },
-        { path: 'apache.confPath', label: 'Путь к httpd.conf', hint: 'Проверяется только для локального Apache' },
-        { path: 'apache.warningDuration', label: 'Порог медленного ответа', hint: 'Например 2s' },
+        {
+          path: "apache.address",
+          label: "Адрес",
+          hint: "Например 192.168.0.75 или localhost",
+        },
+        { path: "apache.port", label: "Порт", hint: "Пусто — 80" },
+        { path: "apache.publicationName", label: "Имя публикации базы" },
+        {
+          path: "apache.confPath",
+          label: "Путь к httpd.conf",
+          hint: "Проверяется только для локального Apache",
+        },
+        {
+          path: "apache.warningDuration",
+          label: "Порог медленного ответа",
+          hint: "Например 2s",
+        },
       ],
     },
     {
-      title: 'DataMobile (пользователь 1С)',
+      title: "DataMobile (пользователь 1С)",
       fields: [
-        { path: 'datamobile.user', label: 'Логин' },
-        { path: 'datamobile.pass', label: 'Пароль', secret: true },
+        { path: "datamobile.user", label: "Логин" },
+        { path: "datamobile.pass", label: "Пароль", secret: true },
       ],
     },
     {
-      title: 'ЛМ ЧЗ',
+      title: "ЛМ ЧЗ",
       fields: [
-        { path: 'lmcz.host', label: 'Хост', hint: 'Пусто — искать сервер сканированием подсети' },
-        { path: 'lmcz.subnet', label: 'Подсеть для поиска', hint: 'Первые три октета, например 192.168.0' },
-        { path: 'lmcz.port', label: 'Порт', hint: 'Обычно 5998' },
-        { path: 'lmcz.scannerTimeout', label: 'Таймаут сканера на хост', hint: 'Например 500ms' },
-        { path: 'lmcz.user', label: 'Логин' },
-        { path: 'lmcz.pass', label: 'Пароль', secret: true },
-        { path: 'lmcz.token', label: 'Токен инициализации', secret: true },
+        {
+          path: "lmcz.host",
+          label: "Хост",
+          hint: "Пусто — искать сервер сканированием подсети",
+        },
+        {
+          path: "lmcz.subnet",
+          label: "Подсеть для поиска",
+          hint: "Первые три октета, например 192.168.0",
+        },
+        { path: "lmcz.port", label: "Порт", hint: "Обычно 5998" },
+        {
+          path: "lmcz.scannerTimeout",
+          label: "Таймаут сканера на хост",
+          hint: "Например 500ms",
+        },
+        { path: "lmcz.user", label: "Логин" },
+        { path: "lmcz.pass", label: "Пароль", secret: true },
+        { path: "lmcz.token", label: "Токен инициализации", secret: true },
       ],
     },
-  ]
+  ];
 
   function get(path) {
-    return path.split('.').reduce((o, k) => o[k], s)
+    return path.split(".").reduce((o, k) => o[k], s);
   }
 
   function set(path, value) {
-    const keys = path.split('.')
-    const last = keys.pop()
-    keys.reduce((o, k) => o[k], s)[last] = value
+    const keys = path.split(".");
+    const last = keys.pop();
+    keys.reduce((o, k) => o[k], s)[last] = value;
   }
 
   async function load() {
-    message = null
+    message = null;
     try {
-      s = await LoadSettings()
+      s = await LoadSettings();
     } catch (e) {
-      message = { ok: false, text: String(e) }
-      return
+      message = { ok: false, text: String(e) };
+      return;
     }
-    saved = JSON.stringify(s)
+    saved = JSON.stringify(s);
   }
-
+  // ❗Отслеживаю вызов метода func (a *App) SaveSettings(s Settings) error {} из gui\app.go
+  // На чистом js должен быть примерно такой код:
+  // try {
+  //     await SaveSettings({ theme: 'dark', timeout: 5 });
+  //     console.log("Сохранено!");
+  // } catch (err) {
+  //     console.error("Ошибка из Go:", err);
+  // }
+  //
+  // --> Здесь:
+  // 1. Вызывается асинхронная функция SaveSettings(...) через await.
+  // 2. В блоке try обрабатывается успешный ответ из Go (когда метод в Go вернул nil в качестве ошибки).
+  // 3. В блоке catch перехватывается ошибка из Go (если метод в Go вернул error != nil), приводя её к строке.
+  // - Контекст UI (Svelte 5)
+  // --> И видны важные интерфейсные детали, специфичные для Svelte:
+  // $state.snapshot(s) вместо литерала объекта:
+  // В Svelte 5 переменная s является реактивным состоянием (обёрнута в JavaScript Proxy).
+  // Если передать Proxy напрямую в Wails/сериализатор, могут возникнуть проблемы с клонированием или чтением данных.
+  // $state.snapshot(s) делает «снимок» — превращает реактивный Proxy обратно в обычный чистый JS-объект (POJO), чтобы Wails мог без проблем сериализовать его в JSON и отправить в Go.
+  // Состояния загрузки и интерфейса:
+  // saving = true и finally { saving = false } блокируют кнопку или показывают спиннер во время отправки.
+  // Вместо простого console.log / console.error обновляется переменная message, чтобы показать пользователю зелёную плашку «Сохранено» или красную ошибку.
+  // saved = JSON.stringify(s) запоминает текущее состояние, чтобы, например, знать, изменил ли пользователь настройки после сохранения (dirty state).
   async function save() {
-    saving = true
-    message = null
+    saving = true;
+    message = null;
     try {
-      await SaveSettings($state.snapshot(s))
-      saved = JSON.stringify(s)
-      message = { ok: true, text: 'Сохранено' }
+      await SaveSettings($state.snapshot(s));
+      saved = JSON.stringify(s);
+      message = { ok: true, text: "Сохранено" };
     } catch (e) {
-      message = { ok: false, text: String(e) }
+      message = { ok: false, text: String(e) };
     } finally {
-      saving = false
+      saving = false;
     }
   }
 
-  onMount(load)
+  onMount(load);
 </script>
 
 {#if s}
   <form
     onsubmit={(e) => {
-      e.preventDefault()
-      save()
+      e.preventDefault();
+      save();
     }}
   >
     <p class="path">Файл: <code>{s.configPath}</code></p>
@@ -104,7 +154,7 @@
             <span class="label">{f.label}</span>
             <span class="input">
               <input
-                type={f.secret && !shown[f.path] ? 'password' : 'text'}
+                type={f.secret && !shown[f.path] ? "password" : "text"}
                 value={get(f.path)}
                 oninput={(e) => set(f.path, e.currentTarget.value)}
                 spellcheck="false"
@@ -114,8 +164,9 @@
                 <button
                   type="button"
                   class="eye"
-                  title={shown[f.path] ? 'Скрыть' : 'Показать'}
-                  onclick={() => (shown[f.path] = !shown[f.path])}>{shown[f.path] ? 'Скрыть' : 'Показать'}</button
+                  title={shown[f.path] ? "Скрыть" : "Показать"}
+                  onclick={() => (shown[f.path] = !shown[f.path])}
+                  >{shown[f.path] ? "Скрыть" : "Показать"}</button
                 >
               {/if}
             </span>
@@ -126,10 +177,15 @@
     {/each}
 
     <div class="actions">
-      <button class="primary" type="submit" disabled={!dirty || saving}>Сохранить</button>
-      <button type="button" onclick={load} disabled={saving}>Перечитать файл</button>
+      <button class="primary" type="submit" disabled={!dirty || saving}
+        >Сохранить</button
+      >
+      <button type="button" onclick={load} disabled={saving}
+        >Перечитать файл</button
+      >
       {#if message}
-        <span class:ok={message.ok} class:err={!message.ok}>{message.text}</span>
+        <span class:ok={message.ok} class:err={!message.ok}>{message.text}</span
+        >
       {:else if dirty}
         <span class="muted">Есть несохраненные изменения</span>
       {/if}
